@@ -1,0 +1,13 @@
+name = "MixedPrecisionPCG"
+uuid = "78fcf2f6-9e44-49b7-bc8f-d1c48c3e43f8"
+authors = ["Thomas Bake"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
