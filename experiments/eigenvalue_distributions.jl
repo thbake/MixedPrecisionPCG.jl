@@ -1,4 +1,4 @@
-export assemble_matrix
+export assemble_matrix, generate_eigs
 export Spectrum, LeftSpectrum, RightSpectrum, EquallySpacedSpectrum
 abstract type Spectrum end
 struct LeftSpectrum          <: Spectrum end  
