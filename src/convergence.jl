@@ -11,19 +11,22 @@ mutable struct ConvergenceData{T}
 
     function ConvergenceData{T}(n::Int, max_iter::Int) where T<:AbstractFloat
 
-        new(
-        n, 
-        max_iter, 
-        ones(max_iter),
-        ones(max_iter),
-        ones(n, max_iter))
+        new(n, max_iter, ones(max_iter), ones(max_iter), ones(n, max_iter))
 
     end
 
 end
 
+"""
+Given a symmetric/Hermitian positive definite (SPD/HPD) matrix A and a vector x 
+compute the error in the A-norm.
+"""
 A_norm(A, x::AbstractVector) = sqrt(dot(x, A*x))
 
+"""
+Given a ConvergenceData struct, an SPD/HPD matrix A and a collection of k 
+vectors in the form of an n by k matrix X, compute the error in the A-norm.
+"""
 function A_norm!(convergence_data::ConvergenceData, A, X::AbstractMatrix) 
 
     M = A * X

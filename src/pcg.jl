@@ -1,21 +1,21 @@
-export hscg!, left_pcg!
+export hscg!, left_pcg!, right_pcg!, split_pcg!
 
-function hscg!(convergence_data::ConvergenceData, A, b, x_0, max_iter, tol = 1e-11)
+function hscg!(convergence_data::ConvergenceData, A, b, x0, max_iter, tol = 1e-11)
 
     # Form initial residual and direction vectors
 
-    x = x_0
-    r = b - A * x_0
+    x = x0
+    r = b - A * x0
     p = r
 
     for k in 1:max_iter
 
         # A⋅pₖ₋₁
-        u = A * p
+        Ap = A * p
         r_dot = dot(r, r)
-        α = r_dot * inv( dot(p, u) ) 
+        α = r_dot * inv( dot(p, Ap) ) 
         x = x + α .* p
-        r = r - α .* u
+        r = r - α .* Ap
         convergence_data.iterates[:, k] = x
         β = dot(r, r) * inv( r_dot )
         p = r + β .* p
@@ -29,28 +29,94 @@ end
 function left_pcg!(
     convergence_data::ConvergenceData,
     A               ::AbstractMatrix, 
-    M               ::AbstractMatrix, # Left preconditioner
+    M               ::FactorizationPreconditioner, # Left preconditioner
     b               ::AbstractVector, # Right-hand side
-    x_0             ::AbstractVector, # Initial guess
+    x0             ::AbstractVector, # Initial guess
     max_iter        ::Int,
     tol             ::AbstractFloat = 1e-11)
 
-    x = x_0
-    r = b - A * x_0
-    z = M\r          # Usually a sparse triangular preconditioner.
+    x = x0
+    r = b - A * x0
+    z = precondition(M, r)          # Usually a sparse triangular preconditioner.
     p = z
 
     for k = 1:max_iter
 
-        u     = A * p
+        Ap     = A * p
         r_dot = dot(r, z)
-        α     = r_dot * inv(dot(u, p))
+        α     = r_dot * inv(dot(Ap, p))
         x     = x + α * p
         convergence_data.iterates[:, k] = x
-        r     = r - α * u
-        z     = M\r
+        r     = r - α * Ap
+        z     = precondition(M, r)
         β     = dot(r, z) * inv(r_dot)
         p     = z + β * p
+
+    end
+
+    return x
+    
+end
+
+function right_pcg!(
+    convergence_data::ConvergenceData,
+    A               ::AbstractMatrix, 
+    M               ::AbstractMatrix, # Right preconditioner
+    b               ::AbstractVector, # Right-hand side
+    x0             ::AbstractVector, # Initial guess
+    max_iter        ::Int,
+    tol             ::AbstractFloat = 1e-11)
+
+    x = x0
+    r = b - A * x0
+    z = M\r          # Usually a sparse triangular preconditioner.
+    p = z
+    q = M\p
+
+    for i = 1:max_iter
+
+        convergence_data.iterates[:, i] = x
+
+    end
+
+
+    
+end
+
+
+"""
+Split preconditioned CG.
+
+Comments as "Performed in u" or "Stored in u" means in precision u denoted
+by the corresponding unit roundoff / data type.
+"""
+function split_pcg!(
+    convergence_data::ConvergenceData,
+    A               ::AbstractMatrix{uA}, 
+    M               ::FactorizationPreconditioner{uL, uR, scheme},
+    b               ::Vector{u}, # Right-hand side
+    x0              ::Vector{u}, # Initial guess
+    max_iter        ::Int,
+    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR, scheme}
+
+    x = x0
+    v = A * uA.(x0)
+    r = b - u.(v)
+    p = precondition(M, r)          # Usually a sparse triangular preconditioner.
+
+    for k in 1:max_iter
+
+        Ap    = u.(A * uA.(p))          # Multiply in uA and store in u.
+        rr    = dot(r, r)               # Performed in u.
+        α     = rr * inv(dot(Ap, p))    # Performed in u.
+        x     = x + α .* p              # Update in u.
+        convergence_data.iterates[:, k] = x
+        w     = precondition(M.Pl, p)   # Apply left preconditioner in uL and store in u.
+        v     = u.(A * uA.(w))
+        r     = r - α .* v
+        β     = dot(r, r) * inv(rr)
+        z     = precondition(M.Pr, r)
+        p     = z + β .* p
 
     end
 

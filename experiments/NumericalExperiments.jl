@@ -5,5 +5,7 @@ module NumericalExperiments
 
     include("eigenvalue_distributions.jl")
 
+    include("factorization_preconditioner.jl")
+
 
 end

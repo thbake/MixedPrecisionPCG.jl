@@ -1,5 +1,5 @@
 using MixedPrecisionPCG
-using Test
+using Test, LinearAlgebra
 
 @testset "MixedPrecisionPCG.jl" begin
 
