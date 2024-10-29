@@ -28,29 +28,29 @@ end
 
 function left_pcg!(
     convergence_data::ConvergenceData,
-    A               ::AbstractMatrix, 
-    M               ::FactorizationPreconditioner, # Left preconditioner
-    b               ::AbstractVector, # Right-hand side
-    x0             ::AbstractVector, # Initial guess
+    A               ::AbstractMatrix{uA}, 
+    M               ::FactorizationPreconditioner{uL, uR, Left}, # Left preconditioner
+    b               ::Vector{u}, # Right-hand side
+    x0              ::Vector{u}, # Initial guess
     max_iter        ::Int,
-    tol             ::AbstractFloat = 1e-11)
+    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR}
 
     x = x0
-    r = b - A * x0
+    r = b - (A * uA.(x0))
     z = precondition(M, r)          # Usually a sparse triangular preconditioner.
     p = z
 
     for k = 1:max_iter
 
-        Ap     = A * p
-        r_dot = dot(r, z)
-        α     = r_dot * inv(dot(Ap, p))
-        x     = x + α * p
+        Ap    = A * uA.(p)
+        rr    = dot(r, z)
+        α     = rr * inv(dot(Ap, p))
+        x     = x + α .* p
         convergence_data.iterates[:, k] = x
-        r     = r - α * Ap
+        r     = r - α .* Ap
         z     = precondition(M, r)
-        β     = dot(r, z) * inv(r_dot)
-        p     = z + β * p
+        β     = dot(r, z) * inv(rr)
+        p     = z + β .* p
 
     end
 
@@ -93,26 +93,27 @@ by the corresponding unit roundoff / data type.
 function split_pcg!(
     convergence_data::ConvergenceData,
     A               ::AbstractMatrix{uA}, 
-    M               ::FactorizationPreconditioner{uL, uR, scheme},
+    M               ::FactorizationPreconditioner{uL, uR, Split},
     b               ::Vector{u}, # Right-hand side
     x0              ::Vector{u}, # Initial guess
     max_iter        ::Int,
-    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR, scheme}
+    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR}
 
     x = x0
-    v = A * uA.(x0)
-    r = b - u.(v)
-    p = precondition(M, r)          # Usually a sparse triangular preconditioner.
+    #v = A * uA.(x0)
+    #r = b - u.(v)
+    r = b - (A * uA.(x0))
+    r = precondition(M.Pl, r)
+    p = precondition(M.Pr, r)          # Usually a sparse triangular preconditioner.
 
     for k in 1:max_iter
 
-        Ap    = u.(A * uA.(p))          # Multiply in uA and store in u.
+        Ap    = A * uA.(p)          # Multiply in uA and store in u.
         rr    = dot(r, r)               # Performed in u.
         α     = rr * inv(dot(Ap, p))    # Performed in u.
         x     = x + α .* p              # Update in u.
         convergence_data.iterates[:, k] = x
-        w     = precondition(M.Pl, p)   # Apply left preconditioner in uL and store in u.
-        v     = u.(A * uA.(w))
+        v     = precondition(M.Pl, Ap)   # Apply left preconditioner in uL and store in u.
         r     = r - α .* v
         β     = dot(r, r) * inv(rr)
         z     = precondition(M.Pr, r)
