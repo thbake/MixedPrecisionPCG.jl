@@ -5,7 +5,7 @@ export AbstractPreconditioner, FactorizationPreconditioner, PreconditioningSchem
        Left, Right, Split
 
 # Exported functions
-export precondition
+export precondition, precondition!, getprecisions
 
 """
 Construction and application of preconditioner.
@@ -71,12 +71,7 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
     """
     function FactorizationPreconditioner{uS, PreconditioningScheme}(
         Pl::AbstractMatrix,
-        Pr::AbstractMatrix) where {
-
-            uS                    <: AbstractFloat,
-            PreconditioningScheme <: Union{Left, Right}
-
-        }
+        Pr::AbstractMatrix) where {uS <: AbstractFloat, PreconditioningScheme}
 
         new{uS, uS, PreconditioningScheme}(uS.(Pl), uS.(Pr))
 
@@ -84,30 +79,39 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
 
 end
 
+function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Split}) where {uL, uR}
+
+    return eltype(preconditioner.Pl), eltype(preconditioner.Pr)
+
+end
+
+function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Left}) where {uL, uR}
+
+    return eltype(preconditioner.Pl)
+
+end
+
 precondition(
     M::FactorizationPreconditioner{uL, uR, Left},
     v::Vector{u}) where {u, uL, uR } =  u.(M.Pr \ (M.Pl \ uL.(v)))
 
-function precondition(
+precondition(
     M::FactorizationPreconditioner{uL, uR, Split},
-    r::Vector{u}) where {u, uL, uR}
+    r::Vector{u}) where {u, uL, uR} = M.Pr \ uR.(M.Pl \ uL.(r))
 
-    println("I am being called")
-    tmp =  M.Pl \ uL.(r)
-    return M.Pr \ uR.(tmp)
+function precondition(Ms::AbstractMatrix{uS}, v::Vector{u}) where {uS <: AbstractFloat, u <:AbstractFloat} 
+
+    return u.(Ms \ uS.(v)) 
 
 end
 
-precondition(Ms::AbstractMatrix{uS}, v::Vector{u}) where {uS <: AbstractFloat, u <:AbstractFloat} = u.(Ms \ uS.(v)) 
+function precondition!(
+    M::FactorizationPreconditioner{uL, uR, Split},
+    v::Vector{u}) where {u, uL, uR}
 
-n = 10
+    v .= u.(M.Pl \ uL.(v)) # Change variable in place.
+    p  = u.(M.Pr \ uR.(v))
 
+    return p
 
-A = sprand(n, n, 0.05)
-M = A'A + 2I           # Get some sparse SPD matrix
-
-# Construct preconditioner with incomplete Cholesky factorization.
-L1 = mxcall(:ichol, 1, M)  # More expensive due to Julia/MATLAB intercommunication.
-L2 = mat"ichol($M, struct('type', 'ict', 'droptol', 1e-2))"
-
-# Later I could try implementing own incomplete Cholesky factorizations.
+end

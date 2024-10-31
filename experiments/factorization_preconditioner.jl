@@ -1,7 +1,13 @@
-using MATLAB, Plots
+using MATLAB, Plots, LaTeXStrings, MixedPrecisionPCG
+
+export run_experiment!
+
+setprecision(BigFloat, 128)
 
 """
-Reproducing example from 
+Reproducing example from https://doi.org/10.1016/j.laa.2024.04.003
+
+Thanks to Jan Papez for providing me with the data.
 """
 
 # Example data.
@@ -14,47 +20,91 @@ close(mf)
 
 # Construct left preconditioners.
 L1      = mat"ichol($A, struct('shape', 'lower'))"
-M1      = FactorizationPreconditioner{Float64, Left}(L1, transpose(L1))
+#M1      = FactorizationPreconditioner{Float64, Left}(L1, transpose(L1))
 droptol = 1e-2
 L2      = mat"ichol($A, struct('type', 'ict', 'droptol', $droptol, 'shape', 'lower'))"
-M2      = FactorizationPreconditioner{Float64, Left}(L2, transpose(L2))
-M3      = FactorizationPreconditioner{Float32, Left}(L2, transpose(L2))
-M4      = FactorizationPreconditioner{Float64, Float64, Split}(L2, transpose(L2))
-
 
 # Problem data
 n        = size(A, 1)
 max_iter = 50
-cd1      = ConvergenceData{Float64}(n, max_iter)
-cd2      = ConvergenceData{Float64}(n, max_iter)
-cd3      = ConvergenceData{Float64}(n, max_iter)
-cd4      = ConvergenceData{Float64}(n, max_iter)
-x0       = zeros(n)                              # Initial guess.
+x0       = zeros(n)
 
 
-function run_experiment()
+"""
+Generate preconditioners data structures based on preconditioning scheme, a 
+vector of precisions, and the actual preconditioners.
+"""
+function generate_preconditioners(
+    scheme    ::Type{<:PreconditioningScheme},
+    Pl        ::AbstractMatrix,
+    Pr        ::AbstractMatrix,
+    precisions::Vararg{Type{<:AbstractFloat}, N}) where N
 
-    left_pcg!( cd1, A, M1, b, x0, max_iter)
-    left_pcg!( cd2, A, M2, b, x0, max_iter)
-    left_pcg!( cd3, A, M3, b, x0, max_iter)
-    split_pcg!(cd4, A, M4, b, x0, max_iter)
+    preconditioners = [ FactorizationPreconditioner{u, scheme}(Pl, Pr) for u in precisions]
 
-    return cd1, cd2, cd3, cd4
+    return preconditioners
+end
+
+function generate_convergence_data(n::Int, max_iter::Int, length::Int)
+
+    return [ ConvergenceData{Float64}(n, max_iter) for _ in 1:length ]
 
 end
 
-function plot_convergence(v_cd::Vector{ConvergenceData{Float64}})
 
-    for k in 1:length(v_cd)
+
+get_pcg_variant(::Left)  = left_pcg!
+get_pcg_variant(::Split) = split_pcg!
+
+
+
+function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) where {uL, uR}
+
+    left_precision = getprecisions(preconditioner)
+    return L"$u_L = $" * string(left_precision)  
+
+end
+
+function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Split}) where {uL, uR}
+
+    left_precision, right_precision = getprecisions(preconditioner)
+    return L"$u_L = $" * string(left_precision) * L", $u_R = $" * string(right_precision) 
+
+end
+
+
+function plot_convergence(
+    v_cd  ::Vector{ConvergenceData{Float64}},
+    v_prec::Vector{<:AbstractPreconditioner})
+
+    # Compute error in the A-norm for all runs.
+    for k in eachindex(v_cd)
         compute_error_norm!(v_cd[k], x, A)
     end
 
-    plot(collect(1:v_cd[1].iter_number), v_cd[1].relative_error_norm, yscale = :log10, label = "cd 1")
+    p = plot()
 
-    for k in 2:length(v_cd)
-        display(plot!(collect(1:v_cd[k].iter_number), v_cd[k].relative_error_norm))
+    for k in eachindex(v_cd)
+        display(
+            plot!( 
+                collect(1:v_cd[k].iter_number), v_cd[k].relative_error_norm, yscale = :log10, label = getlabel(v_prec[k])
+            ) 
+        )
     end
 
-    #labels = permutedims([ "cd " * string(i) for i in 1:length(v_cd) ])
+end
+
+function run_experiment!(scheme::Type{<:PreconditioningScheme})
+
+    f      = get_pcg_variant(scheme())
+    v_prec = generate_preconditioners(scheme, L2, transpose(L2), Float64, Float32, Float16)
+    v_cd   = generate_convergence_data(n, max_iter, length(v_prec))
+
+    for i in eachindex(v_cd)
+        f( v_cd[i], A, v_prec[i], b, x0, max_iter )
+    end
+
+    plot_convergence(v_cd, v_prec)
+
 end
 

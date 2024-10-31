@@ -100,19 +100,20 @@ function split_pcg!(
     tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR}
 
     x = x0
-    #v = A * uA.(x0)
-    #r = b - u.(v)
     r = b - (A * uA.(x0))
-    r = precondition(M.Pl, r)
-    p = precondition(M.Pr, r)          # Usually a sparse triangular preconditioner.
+    #r = precondition(M.Pl, r)
+    #p = precondition(M.Pr, r)          # Usually a sparse triangular preconditioner.
+     p = precondition!(M, r)
 
     for k in 1:max_iter
 
-        Ap    = A * uA.(p)          # Multiply in uA and store in u.
-        rr    = dot(r, r)               # Performed in u.
-        α     = rr * inv(dot(Ap, p))    # Performed in u.
-        x     = x + α .* p              # Update in u.
+        Ap    = A * uA.(p)               # Multiply in uA and store in u.
+        rr    = dot(r, r)                # Performed in u.
+        α     = rr * inv(dot(Ap, p))     # Performed in u.
+        x     = x + α .* p               # Update in u.
+
         convergence_data.iterates[:, k] = x
+
         v     = precondition(M.Pl, Ap)   # Apply left preconditioner in uL and store in u.
         r     = r - α .* v
         β     = dot(r, r) * inv(rr)
