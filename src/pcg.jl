@@ -43,13 +43,15 @@ function left_pcg!(
     for k = 1:max_iter
 
         Ap    = A * uA.(p)
-        rr    = dot(r, z)
-        α     = rr * inv(dot(Ap, p))
+        rz    = dot(r, z)
+        α     = rz * inv(dot(Ap, p))
         x     = x + α .* p
+
         convergence_data.iterates[:, k] = x
+        
         r     = r - α .* Ap
         z     = precondition(M, r)
-        β     = dot(r, z) * inv(rr)
+        β     = dot(r, z) * inv(rz)
         p     = z + β .* p
 
     end
@@ -101,9 +103,7 @@ function split_pcg!(
 
     x = x0
     r = b - (A * uA.(x0))
-    #r = precondition(M.Pl, r)
-    #p = precondition(M.Pr, r)          # Usually a sparse triangular preconditioner.
-     p = precondition!(M, r)
+    p = precondition!(M, r)
 
     for k in 1:max_iter
 

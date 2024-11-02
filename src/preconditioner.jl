@@ -93,7 +93,7 @@ end
 
 precondition(
     M::FactorizationPreconditioner{uL, uR, Left},
-    v::Vector{u}) where {u, uL, uR } =  u.(M.Pr \ (M.Pl \ uL.(v)))
+    v::Vector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uL.(v)))
 
 precondition(
     M::FactorizationPreconditioner{uL, uR, Split},
