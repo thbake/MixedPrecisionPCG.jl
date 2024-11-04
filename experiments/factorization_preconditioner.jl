@@ -1,4 +1,4 @@
-using MATLAB, Plots, LaTeXStrings, MixedPrecisionPCG
+using MATLAB,  MixedPrecisionPCG
 
 export run_experiment!
 
@@ -63,63 +63,25 @@ function generate_convergence_data(n::Int, max_iter::Int, length::Int)
 
 end
 
-
-
 get_pcg_variant(::Left)  = left_pcg!
 get_pcg_variant(::Split) = split_pcg!
 
-
-
-function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) where {uL, uR}
-
-    left_precision = getprecisions(preconditioner)
-
-    return L"$u_L = $" * string(left_precision)  
-
-end
-
-function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Split}) where {uL, uR}
-
-    left_precision, right_precision = getprecisions(preconditioner)
-    return  L"$u_L = $" * string(left_precision) * L", $u_R = $" * string(right_precision) 
-
-end
-
-gettitle(::Left)  = "Mixed precision left PCG"
-gettitle(::Split) = "Mixed precision split PCG"
-
-function plot_convergence(
-    v_cd  ::Vector{ConvergenceData{Float64}},
-    v_prec::Vector{<:AbstractPreconditioner},
-    scheme::Type{<:PreconditioningScheme})
-
-    # Compute error in the A-norm for all runs.
-    for k in eachindex(v_cd)
-        compute_error_norm!(v_cd[k], x, A)
-    end
-
-    p = plot(title = gettitle( scheme() ) )
-
-    for k in eachindex(v_cd)
-        display(
-            plot!( 
-                collect(1:v_cd[k].iter_number), v_cd[k].relative_error_norm, yscale = :log10, label = getlabel(v_prec[k])
-            ) 
-        )
-    end
-
-end
-
 function run_experiment!(scheme::Type{<:PreconditioningScheme})
 
-    f      = get_pcg_variant(scheme())
-    #v_prec = generate_preconditioners(scheme, L2, transpose(L2), Float64, Float32, Float16)
-    v_prec = generate_preconditioners(L2, transpose(L2), (Float64, Float64), (Float64, Float32), (Float16, Float16))
+    pcg_variant = get_pcg_variant(scheme())
+    #v_prec     = generate_preconditioners(scheme, L2, transpose(L2), Float64, Float32, Float16)
+    v_prec     = generate_preconditioners(L2, transpose(L2), (Float64, Float64), (Float64, Float32), (Float32, Float64), (Float32, Float32), (Float16, Float16))
     #v_prec = generate_preconditioners(scheme, I(n), I(n), Float64, Float32, Float16)
     v_cd   = generate_convergence_data(n, max_iter, length(v_prec))
 
     for i in eachindex(v_cd)
-        f( v_cd[i], A, v_prec[i], b, x0, max_iter )
+        pcg_variant( v_cd[i], A, v_prec[i], b, x0, max_iter )
+    end
+
+    # Compute error in the A-norm for all runs.
+    for k in eachindex(v_cd)
+        compute_error_norm!(    v_cd[k], x, A)
+        compute_backward_error!(v_cd[k], A, b)
     end
 
     plot_convergence(v_cd, v_prec, scheme)
