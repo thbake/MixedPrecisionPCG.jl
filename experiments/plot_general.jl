@@ -10,6 +10,14 @@ function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) whe
 
 end
 
+function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Right}) where {uL, uR}
+
+    right_precision = getprecisions(preconditioner)
+
+    return L"$u_L = $" * string(right_precision)  
+
+end
+
 function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Split}) where {uL, uR}
 
     left_precision, right_precision = getprecisions(preconditioner)
@@ -22,11 +30,13 @@ get_backwarderror(v_cd::Vector{ConvergenceData{Float64}}) = [ v_cd[k].relative_b
 
 gettitle(::Left)  = "Mixed precision left PCG"
 gettitle(::Split) = "Mixed precision split PCG"
+gettitle(::Right) = "Mixed precision right PCG"
 
 function plot_convergence(
     v_cd  ::Vector{ConvergenceData{Float64}},
     v_prec::Vector{<:AbstractPreconditioner},
-    scheme::Type{<:PreconditioningScheme})
+    scheme::Type{<:PreconditioningScheme},
+    A     ::AbstractMatrix)
 
 
     title = plot(title = gettitle( scheme() ) )
@@ -36,6 +46,10 @@ function plot_convergence(
     backwarderror_data  = get_backwarderror(v_cd)
     labels              = permutedims([getlabel(v_prec[k]) for k in 1:length(v_prec)])
     yfontsize           = font(8)
+
+
+    println(typeof(v_prec[1]))
+    #condition_numbers = [preconditioned_condition_number(A, v_prec[i]) for i in eachindex(v_prec)]
 
 
     Anormerror_plot = plot(

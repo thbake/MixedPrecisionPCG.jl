@@ -1,5 +1,6 @@
 export ConvergenceData
-export compute_error_norm!, A_norm, A_norm!, compute_residual_norm!, compute_backward_error!
+export compute_error_norm!, compute_error!, A_norm, A_norm!, compute_residual_norm!, 
+       compute_backward_error!, preconditioned_condition_number
 
 mutable struct ConvergenceData{T}
 
@@ -43,10 +44,14 @@ function A_norm!(cd::ConvergenceData, A, X::AbstractMatrix)
 
 end
 
+""" 
+Compute error in the A-norm 
+"""
 function compute_error_norm!(
     cd::ConvergenceData,
     exact_solution  ::Vector,
-    A)
+    A,
+    ::FactorizationPreconditioner) 
 
     # This should be an (n x k) error matrix.
     error_matrix = exact_solution .- cd.iterates
@@ -72,6 +77,27 @@ function compute_error!(cd::ConvergenceData, exact_solution::AbstractVector, A)
     end
 end
 
+function compute_error!(
+    cd            ::ConvergenceData,
+    exact_solution::AbstractVector,
+    A,
+    M::FactorizationPreconditioner{uL, uR, Right}) where {uL, uR} 
+
+    errors         = ones(size(A, 1), cd.iter_number)
+    solution_norm  = A_norm(A, exact_solution)
+
+    for k in 1:cd.iter_number
+
+        errors[:, k] = precondition(M, cd.iterates[:, k] - exact_solution)
+        tmp          = A * errors[:, k]
+        cd.relative_error_norm[k] = sqrt(dot(tmp, @view(errors[:, k]))) / solution_norm
+
+    end
+end
+
+"""
+Compute residual norm.
+"""
 function compute_residual_norm!(cd::ConvergenceData, A, b)
 
     xk     = cd.iterates
@@ -82,6 +108,10 @@ function compute_residual_norm!(cd::ConvergenceData, A, b)
 
     end
 end
+
+"""
+Compute normwise backward error.
+"""
 
 function compute_backward_error!(cd::ConvergenceData, A, b)
 
@@ -98,3 +128,35 @@ function compute_backward_error!(cd::ConvergenceData, A, b)
    end
 
 end
+
+function compute_backward_error!(
+    cd::ConvergenceData,
+    A,
+    M::FactorizationPreconditioner{uL, uR, Right},
+    b) where {uL, uR, Right}
+
+    compute_residual_norm!(cd, A, b)
+
+    Anorm = norm(A)
+    bnorm = norm(b)
+
+    for k in 1:cd.iter_number
+
+        approxnorm                    = norm(precondition(M, @view cd.iterates[:, k]))
+        cd.relative_backward_error[k] = cd.residual_norm[k] * inv((Anorm * approxnorm) + bnorm)
+
+    end
+    
+
+end
+
+function preconditioned_condition_number(
+    A::AbstractMatrix,
+    M::FactorizationPreconditioner{uL, uR, T}) where {uL, uR, T<:PreconditioningScheme}
+
+    Aprec = precondition(M, A)
+
+    return cond(Aprec)
+
+end
+

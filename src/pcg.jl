@@ -62,26 +62,37 @@ end
 
 function right_pcg!(
     convergence_data::ConvergenceData,
-    A               ::AbstractMatrix, 
-    M               ::AbstractMatrix, # Right preconditioner
-    b               ::AbstractVector, # Right-hand side
-    x0             ::AbstractVector, # Initial guess
+    A               ::AbstractMatrix{uA}, 
+    M               ::FactorizationPreconditioner{uL, uR, Right}, # Left preconditioner
+    b               ::Vector{u}, # Right-hand side
+    x0              ::Vector{u}, # Initial guess
     max_iter        ::Int,
-    tol             ::AbstractFloat = 1e-11)
+    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR}
 
-    x = x0
-    r = b - A * x0
-    z = M\r          # Usually a sparse triangular preconditioner.
-    p = z
-    q = M\p
+    y = x0
+    r = b - (A * uA.(x0))
+    z = precondition(M,r)          # Usually a sparse triangular preconditioner.
+    p = r
+    #q = precondition(M,p)
+    q = r
 
-    for i = 1:max_iter
+    for k = 1:max_iter
+        q     = precondition(M, p)
+        Aq    = A * uA.(q)
+        rz    = dot(r, z)
+        α     = rz * inv(dot(Aq, q))
+        y     = y + α .* p
 
-        convergence_data.iterates[:, i] = x
+        convergence_data.iterates[:, k] = y
+        
+        r     = r - α .* Aq
+        z     = precondition(M, r)
+        β     = dot(r, z) * inv(rz)
+        p     = r + β .* p
 
     end
 
-
+    return y
     
 end
 

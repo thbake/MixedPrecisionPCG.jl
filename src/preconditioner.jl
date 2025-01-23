@@ -91,13 +91,23 @@ function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Left}
 
 end
 
+function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Right}) where {uL, uR}
+
+    return eltype(preconditioner.Pr)
+
+end
+
 precondition(
     M::FactorizationPreconditioner{uL, uR, Left},
-    v::Vector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uL.(v)))
+    v::AbstractVector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uL.(v)))
+
+precondition(
+    M::FactorizationPreconditioner{uL, uR, Right},
+    v::AbstractVector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uR.(v)))
 
 precondition(
     M::FactorizationPreconditioner{uL, uR, Split},
-    r::Vector{u}) where {u, uL, uR} = M.Pr \ uR.(M.Pl \ uL.(r))
+    r::AbstractVector{u}) where {u, uL, uR} = M.Pr \ uR.(M.Pl \ uL.(r))
 
 function precondition(Ms::AbstractMatrix{uS}, v::Vector{u}) where {uS <: AbstractFloat, u <:AbstractFloat} 
 
@@ -113,5 +123,21 @@ function precondition!(
     p  = u.(M.Pr \ uR.(v))
 
     return p
+
+end
+
+function precondition(
+    M::FactorizationPreconditioner{uL, uR, Left},
+    A::AbstractMatrix) where{uL, uR}
+
+    return inv(M.Pl * M.Pr) * A
+
+end
+
+function precondition(
+    M::FactorizationPreconditioner{uL, uR, Split},
+    A::AbstractMatrix) where{uL, uR}
+
+    return inv(M.Pl) * A * inv(M.Pr) 
 
 end

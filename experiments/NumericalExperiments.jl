@@ -3,6 +3,8 @@ module NumericalExperiments
     using MixedPrecisionPCG
     using LinearAlgebra
 
+    include("utils.jl")
+
     include("eigenvalue_distributions.jl")
 
     include("plot_general.jl")
