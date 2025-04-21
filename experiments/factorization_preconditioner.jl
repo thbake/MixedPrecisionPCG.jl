@@ -49,7 +49,8 @@ function run_experiment!(scheme::Type{<:PreconditioningScheme})
         pcg_variant( v_cd[i], A, v_prec[i], b, x0, max_iter )
     end
 
-    compute_errors!(v_cd, x, A, b, v_prec, scheme)
+    #compute_errors!(v_cd, x, A, b, v_prec, scheme)
+    compute_errors!(v_cd, x, A, b, scheme)
 
     plot_convergence(v_cd, v_prec, scheme, A)
 

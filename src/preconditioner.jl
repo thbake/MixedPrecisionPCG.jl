@@ -1,8 +1,7 @@
 using MATLAB
 
 # Exported structs
-export AbstractPreconditioner, FactorizationPreconditioner, PreconditioningScheme,
-       Left, Right, Split
+export AbstractPreconditioner, FactorizationPreconditioner, PreconditioningScheme, Left, Split
 
 # Exported functions
 export precondition, precondition!, getprecisions
@@ -16,7 +15,6 @@ Abstract tupe representing how the preconditioner will be applied.
 """
 abstract type PreconditioningScheme end
 struct Left  <: PreconditioningScheme end 
-struct Right <: PreconditioningScheme end 
 struct Split <: PreconditioningScheme end 
 
 """
@@ -53,18 +51,13 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
 
     end
 
-    """
-    Constructor for split factorization-based preconditioner.
-    """
-    function FactorizationPreconditioner{uL, uR, Split}(
-        Pl::AbstractMatrix,
-        Pr::AbstractMatrix) where { uL <: AbstractFloat, uR <: AbstractFloat }
+    function FactorizationPreconditioner{uL, uR, scheme}(
+        Pl    ::AbstractMatrix, 
+        Pr    ::AbstractMatrix) where {uL <: AbstractFloat, uR <: AbstractFloat, scheme }
 
-
-        new( uL.(Pl), uR.(Pr) )
+        new(uL.(Pl), uR.(Pr))
 
     end
-
 
     """
     Constructor for one sided factorization-based preconditioner.
@@ -91,19 +84,11 @@ function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Left}
 
 end
 
-function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Right}) where {uL, uR}
-
-    return eltype(preconditioner.Pr)
-
-end
 
 precondition(
     M::FactorizationPreconditioner{uL, uR, Left},
     v::AbstractVector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uL.(v)))
 
-precondition(
-    M::FactorizationPreconditioner{uL, uR, Right},
-    v::AbstractVector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uR.(v)))
 
 precondition(
     M::FactorizationPreconditioner{uL, uR, Split},

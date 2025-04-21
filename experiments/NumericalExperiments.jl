@@ -1,11 +1,9 @@
 module NumericalExperiments
 
     using MixedPrecisionPCG
-    using LinearAlgebra
+    using LinearAlgebra, SparseArrays
 
     include("utils.jl")
-
-    include("eigenvalue_distributions.jl")
 
     include("plot_general.jl")
 

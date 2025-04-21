@@ -7,6 +7,12 @@ module MixedPrecisionPCG
 
     include("convergence.jl")
 
+    include("system.jl")
+
     include("pcg.jl")
+
+    include("data_computation.jl")
+
+
 
 end

@@ -4,11 +4,13 @@ authors = ["Thomas Bake"]
 version = "1.0.0-DEV"
 
 [deps]
+IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MATLAB = "10e44e05-a98a-55b3-a45b-ba969058deb6"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
+IterativeSolvers = "0.9.4"
 LinearAlgebra = "1.11.0"
 MATLAB = "0.8.4"
 SparseArrays = "1.11.0"

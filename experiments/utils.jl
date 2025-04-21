@@ -1,15 +1,8 @@
 export FactPrec
-export generate_preconditioners, initialize_convergence_data, compute_errors!, 
-       get_pcg_variant
+export generate_preconditioners, getprecisions, collect_data
 
 const FactPrec{uL, uR, S} = FactorizationPreconditioner{uL, uR, S}
 
-"""
-Distinguish between algorithms depending on the preconditioning scheme used.
-"""
-get_pcg_variant(::Left)  = left_pcg!
-get_pcg_variant(::Split) = split_pcg!
-get_pcg_variant(::Right) = right_pcg!
 
 """
 Generate preconditioner data structures based on preconditioning scheme, a 
@@ -38,44 +31,47 @@ function generate_preconditioners(
     return preconditioners
 end
 
-"""
-Initialize convergence data.
-"""
-function initialize_convergence_data(n::Int, max_iter::Int, length::Int)
+function getprecisions(scheme::Type{Left}, precisions::Type{<:AbstractFloat})
 
-    return [ ConvergenceData{Float64}(n, max_iter) for _ in 1:length ]
+    return precisions, precisions
 
 end
 
+function getprecisions(scheme::Type{Split}, precisions::Tuple{Type, Type})
 
-function compute_errors!(v_cd, x, A, b, ::AbstractVector, scheme::Union{Type{Left}, Type{Split}}) 
+    return precisions[1], precisions[2]
+end
 
-    # Compute error in the A-norm for all runs.
-    for k in eachindex(v_cd)
-        compute_error!(    v_cd[k], x, A)
-        compute_backward_error!(v_cd[k], A, b)
+function collect_data(
+    scheme         ::Type{<:PreconditioningScheme},
+    precisions     ::AbstractVector,
+    ls             ::LinearSystem,
+    preconditioner)
+
+    ad = AccuracyData{Float64}(length(precisions), max_iter)
+
+    n  = size(ls.A, 1)
+
+    for i in eachindex(precisions)
+
+        # Extract precisions
+        uL, uR = getprecisions(scheme, precisions[i])
+
+        # Generate preconditioner data structure with corresponding precisions.
+        M = FactorizationPreconditioner{uL, uR, scheme}(preconditioner, preconditioner')
+
+        # Initialize convergence data structure.
+        cd = ConvergenceData{Float64}(n, max_iter)
+
+        # Run PCG on linear system.
+        pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter)
+
+        # Compute accuracy data (norms of true/updated residuals, errors, etc.)
+        compute_accuracy_data!(ad, cd, ls, i)
+
     end
 
-end
-
-function compute_errors!(v_cd, x, A, b, v_prec::AbstractVector, scheme::Type{Right}) 
-
-    MLinv = inv(v_prec[1].Pl)
-    MRinv = inv(v_prec[1].Pr)
-    Aprec = (A * MRinv) * MLinv 
-    #Aprecleft = (MRinv * MLinv) * A
-    #Asplit = MLinv * A * MRinv
-    #println("Condition number of unpreconditioned matrix: ", cond(Matrix(A)))
-    #println("Condition number of left preconditioned matrix: ", cond(Matrix(Aprecleft)))
-    #kappa = cond(Matrix(Aprec))
-    #println("Condition number of right preconditioned matrix: ", kappa)
-    #println("Condition number of split preconditioned matrix: ", )
-    y = Aprec\b
-
-    # Compute error in the A-norm for all runs.
-    for k in eachindex(v_cd)
-        compute_error!(    v_cd[k], y, A, v_prec[k])
-        compute_backward_error!(v_cd[k], A, v_prec[k], b)
-    end
+    return ad
 
 end
+
