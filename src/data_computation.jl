@@ -28,16 +28,18 @@ mutable struct AccuracyData{T}
 end
 
 function compute_accuracy_data!(
-    ad ::AccuracyData{T},
-    cd ::ConvergenceData{T},
-    ls ::LinearSystem{T},
+    scheme::Type{<:PreconditioningScheme},
+    ad            ::AccuracyData{T},
+    cd            ::ConvergenceData{T},
+    ls            ::LinearSystem{T},
+    preconditioner::AbstractMatrix,
     idx::Int) where T
 
-    ad.trueresnorm[idx]    = true_residual_norm(cd, ls)
-    ad.updatedresnorm[idx] = inv(ls.normA * ls.normx) .* [ norm(cd.updated_residuals[:,k]) for k in 1:cd.iter_number]
-    ad.errornorm[idx]      = error_Anorm(cd, ls)
-    ad.resgapnorm[idx]     = residualgapnorm(cd, ls)
-    ad.max_ratios[idx]     = max_iterate_ratio(cd, ls.x)
+    ad.trueresnorm[idx]    =    true_residual_norm(cd, ls)
+    ad.updatedresnorm[idx] = updated_residual_norm(cd, ls)
+    ad.errornorm[idx]      =           error_Anorm(cd, ls)
+    ad.resgapnorm[idx]     =       residualgapnorm(cd, ls, scheme, preconditioner)
+    ad.max_ratios[idx]     =   max_iterate_ratio(cd, ls.x)
     
 end
 
@@ -47,11 +49,23 @@ function Base.show(io::IO, ad::AccuracyData{T}) where T<:AbstractFloat
     println(io, " - Relative true residual norm:    ", typeof(ad.trueresnorm))
     println(io, " - Relative updated residual norm: ", typeof(ad.updatedresnorm))
     println(io, " - Relative in the A-norm:         ", typeof(ad.errornorm))
-    println(io, " - Maximum iterate ratios:         ", typeof(ad.max_rations))
+    println(io, " - Maximum iterate ratios:         ", typeof(ad.max_ratios))
 
     println(io, "\nComputations ran for ",  ad.iter_number, " iterations.")
     println(io, "Achieved relative residual norm: ", ad.trueresnorm[end]
     )
+end
+
+"""
+Compute updated residual norm ||rk|| / ||A|| ||x||
+"""
+
+function updated_residual_norm(cd::ConvergenceData, ls::LinearSystem)
+    
+    norm_rk = [ norm(cd.updated_residuals[:, k]) for k in 1:cd.iter_number ]
+
+    return inv(ls.normA * ls.normx) .* norm_rk
+    
 end
 
 
@@ -96,16 +110,42 @@ function error_Anorm(cd::ConvergenceData, ls::LinearSystem)
 end
 
 """
-Compute the relative residual gap norm ||b - A xk - rk|| / ||A|| ||x|| for the 
-left preconditioned case.
+Process residuals rk for computing the residual gap. In the left preconditioned
+case there is nothing to do since the left preconditioner does not affect
+the bound on the residual gap.
+"""
+process_residuals(rk::AbstractMatrix, ::Left, ::AbstractMatrix)    = rk
+
+
+"""
+Process residuals rk for computing the residual gap. In the split preconditioned
+case we need to unprecondition the residuals at each iteration.
+"""
+process_residuals(rk::AbstractMatrix, ::Split, ML::AbstractMatrix) = ML * rk
+
+
+"""
+Compute the relative residual gap norm 
+ 
+    ||b - A xk - rk|| / ||A|| ||x|| 
+
+for the left preconditioned case or 
+
+    ||b - A xk - ML rk|| / ||A|| ||x|| 
+
+for the split preconditioned case.
 """
 
-function residualgapnorm(cd::ConvergenceData, ls::LinearSystem)
+function residualgapnorm(
+    cd            ::ConvergenceData,
+    ls            ::LinearSystem,
+    scheme        ::Type{<:PreconditioningScheme},
+    preconditioner::AbstractMatrix)
 
     resgapnorm = zeros(cd.iter_number)
 
     xk = cd.iterates
-    rk = cd.updated_residuals
+    rk = process_residuals(copy(cd.updated_residuals), scheme(), preconditioner)
 
     for k in 1:cd.iter_number
 
@@ -117,30 +157,6 @@ function residualgapnorm(cd::ConvergenceData, ls::LinearSystem)
 
 end
 
-"""
-Compute the relative residual gap norm ||b - A xk - ML rk|| / ||A|| ||x|| for 
-the split preconditioned case, where ML is the left preconditioner.
-"""
-
-function residualgapnorm(
-    cd::ConvergenceData, 
-    ls::LinearSystem,
-    ML::AbstractMatrix)
-
-    resgapnorm = zeros(cd.iter_number)
-
-    xk = cd.iterates
-    rk = ML * cd.updated_residuals # Unprecondition updated residuals.
-
-    for k in 1:cd.iter_number
-
-        resgapnorm[k] = norm(ls.b - ls.A * @view(xk[:, k]) - @view(rk[:, k]))
-
-    end
-
-    return inv(ls.normA * ls.normx) .* resgapnorm
-
-end
 
 
 """

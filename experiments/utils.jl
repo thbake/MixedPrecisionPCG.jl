@@ -46,7 +46,8 @@ function collect_data(
     scheme         ::Type{<:PreconditioningScheme},
     precisions     ::AbstractVector,
     ls             ::LinearSystem,
-    preconditioner)
+    preconditioner ::AbstractMatrix,
+    max_iter::Int)
 
     ad = AccuracyData{Float64}(length(precisions), max_iter)
 
@@ -67,7 +68,7 @@ function collect_data(
         pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter)
 
         # Compute accuracy data (norms of true/updated residuals, errors, etc.)
-        compute_accuracy_data!(ad, cd, ls, i)
+        compute_accuracy_data!(scheme, ad, cd, ls, preconditioner, i)
 
     end
 

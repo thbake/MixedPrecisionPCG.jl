@@ -27,6 +27,9 @@ function hscg!(convergence_data::ConvergenceData, A, b, x0, max_iter, tol = 1e-1
 
 end
 
+"""
+Left preconditioned CG.
+"""
 function pcg!(
     convergence_data::ConvergenceData,
     A               ::AbstractMatrix{uA}, 

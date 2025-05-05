@@ -1,4 +1,4 @@
-using Plots, LaTeXStrings
+using Plots, LaTeXStrings, MixedPrecisionPCG
 
 export plot_accuracy_data, condition_plot
 
@@ -57,6 +57,10 @@ gettitle(::Split) = "Mixed precision split PCG"
 
 
 
+resgapnorm_label(::Left)  = L"$\frac{||b - Ax_k - \hat{r}_k||}{||A|| ||x||}$"
+
+resgapnorm_label(::Split) = L"$\frac{||b - Ax_k - M_L \hat{r}_k||}{||A|| ||x||}$"
+
 function plot_accuracy_data(
     ad        ::AccuracyData,
     precisions::AbstractVector,
@@ -72,34 +76,62 @@ function plot_accuracy_data(
 
     default(
         yscale     = :log10, 
-        legend     = :topright,
+        legend     = :bottomright,
         markersize = 2,
-        alpha      = 0.8,
-        label      = labels
+        alpha      = 0.7,
+        label      = labels,
+        linestyle  = :dot,
+        palette    = :Dark2_5,
+        lw         = 2,
+        legendfontsize = 5
     )
+    #scatter(x=(@view xs[1:1000:end]), y=(@view ys[1:1000:end]))
+    #
+    sample_data(data::Vector{<:AbstractVector}, step::Int) = [data[i][1:step:end] for i in eachindex(data)]
 
     p1 = plot(
+        #sample_data(ad.trueresnorm, 5),
         ad.trueresnorm,
-        ylabel     = L"$\frac{||b - Ax_k||}{||A|| ||x||}$",
+        ylabel = L"$\frac{||b - Ax_k||}{||A|| ||x||}$",
+        legend = false
         
     )
 
     p2 = plot(
         ad.updatedresnorm,
-        ylabel          = L"$\frac{||r_k||}{||A|| ||x||}$",
+        ylabel = L"$\frac{||r_k||}{||A|| ||x||}$",
+        legend = false
     )
 
     p3 = plot(
         ad.errornorm,
         ylabel = L"$\frac{||x - x_k||_A}{||x - x_0||_A}$",
+        legend = false
     )
 
     p4 = plot(
         ad.resgapnorm,
-        ylabel        = L"$\frac{||b - Ax_k - M_L \hat{r}_k||}{||A|| ||x||}$"
+        ylabel = resgapnorm_label(scheme()),
+        #yticks = 10.0 .^ collect(-17:2:0)
+        yticks = :auto,
+        legend = false
+        
     )
 
-    plot(p1, p2, p3, p4, layout = (2,2), title = "My plots")
+    # Invisible plot for showing one legend
+    p5 = plot(
+        (1:length(precisions))',
+        legend     = true, 
+        framestyle = :none
+    )
+
+    p6 = plot(
+        (1:length(precisions))',
+        legend     = false,
+        framestyle = :none
+    )
+
+    plot(p1, p2, p5, p3, p4, p6, layout = @layout([a b c{0.25w}; e d f{0.25w}]))
 end
 
 function condition_plot(
@@ -129,9 +161,9 @@ function condition_plot(
         color = colors[i]
 
         plot!(
-            ad_vec[i].trueresnorm,
+            ad_vec[i].resgapnorm,
             label   = label,
-            lc      =  color
+            lc      = color
         )
 
         scatter!(

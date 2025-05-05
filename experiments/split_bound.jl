@@ -30,7 +30,8 @@ function cond_experiment(
     scheme        ::Type{<:PreconditioningScheme},
     precisions    ::AbstractVector, 
     truncation_idx::Int,
-    kappa_range   ::Vector{Float64})
+    kappa_range   ::Vector{Float64},
+    max_iter      ::Int)
 
     ad_vector   = Vector{AccuracyData}(undef, length(kappa_range))
 
@@ -46,7 +47,7 @@ function cond_experiment(
 
         ls = LinearSystem(A, b, x, x0)
 
-        ad_vector[i] = collect_data(scheme, precisions, ls, L)
+        ad_vector[i] = collect_data(scheme, precisions, ls, L, max_iter)
 
     end
 
@@ -57,10 +58,10 @@ d = Float64
 s = Float32
 h = Float16
 
-splitpcg_precisions = [(d, d)]
+splitpcg_precisions = [(s, d)]
 kappa_range         = 10.0 .^collect(2:2:10)
 
-ad_vec = cond_experiment(Split, splitpcg_precisions, 25, kappa_range)
+ad_vec = cond_experiment(Split, splitpcg_precisions, 25, kappa_range, 150)
 
 
 
