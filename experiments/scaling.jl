@@ -1,5 +1,7 @@
 using LinearAlgebra
 
+export two_sided_diagonal_scaling
+
 """
 Symmetry-preserving row and column equilibration.
 
@@ -27,8 +29,8 @@ function row_col_equilibration(A, tol::AbstractFloat)
 
         for i = 1:n
 
-            r[i] = inv( sqrt( norm(@view A[i, :], p = Inf) ) )
-            s[i] = inv( sqrt( norm(@view A[:, i], p = Inf) ) )
+            r[i] = inv( sqrt( norm(@view(A[i, :]), p = Inf) ) )
+            s[i] = inv( sqrt( norm(@view(A[:, i]), p = Inf) ) )
 
         end
 
@@ -44,13 +46,13 @@ end
 
 function two_sided_diagonal_scaling(A, theta::AbstractFloat, tol::AbstractFloat)
 
-    R, S = row_col_equilibration(A)
+    R, S = row_col_equilibration(A, tol)
 
     RAS = R * A * S
 
     beta = maximum(RAS)
 
-    mu   = theta .* x .* inv(beta)
+    mu   = theta * prevfloat(typemax(Float16)) * inv(beta)
 
     return Float16.(mu .* RAS)
 

@@ -29,6 +29,9 @@ end
 
 """
 Left preconditioned CG.
+
+The algorithm is mathematically and numerically equivalent to right 
+preconditioned CG.
 """
 function pcg!(
     convergence_data::ConvergenceData,
@@ -67,7 +70,7 @@ end
 
 
 """
-Split preconditioned CG.
+Split preconditioned CG [Algorithm 9.2,Saad 2003].
 
 Comments as "Performed in u" or "Stored in u" means in precision u denoted
 by the corresponding unit roundoff / data type.
@@ -107,3 +110,46 @@ function pcg!(
     return x
     
 end
+
+function pcg!(
+    convergence_data::ConvergenceData,
+    A               ::AbstractMatrix{uA},
+    M               ::FactorizationPreconditioner{uL, uR,<:PreconditioningScheme},
+    b               ::Vector{u},
+    x0              ::Vector{u},
+    max_iter        ::Int, 
+    scheme          ::PreconditioningScheme) where {u, uA, uL, uR}
+
+    x = x0
+    r = b - (A * uA.(x0))
+
+
+    s, q, z = general_precond(M, r)
+
+    p = q
+
+    for k in 1:max_iter
+
+        Ap = A * uA.(p)
+        zs = dot(z, s)
+        α  = zs * inv(dot(Ap, p))
+        x  = x + α .* p
+
+        convergence_data.iterates[:, k] = x
+
+        r = r - α .* Ap
+
+        convergence_data.updated_residuals[:, k] = r
+
+        s, q, z = general_precond(M, r)
+
+        β = dot(z,s) * inv(zs)
+        p = q + β .* p
+
+    end
+
+    return x
+
+end
+
+    

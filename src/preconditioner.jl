@@ -1,7 +1,7 @@
 using MATLAB
 
 # Exported structs
-export AbstractPreconditioner, FactorizationPreconditioner, PreconditioningScheme, Left, Split
+export AbstractPreconditioner, FactorizationPreconditioner, PreconditioningScheme, Left, Split, Right
 
 # Exported functions
 export precondition, precondition!, getprecisions
@@ -15,6 +15,7 @@ Abstract tupe representing how the preconditioner will be applied.
 """
 abstract type PreconditioningScheme end
 struct Left  <: PreconditioningScheme end 
+struct Right <: PreconditioningScheme end 
 struct Split <: PreconditioningScheme end 
 
 """
@@ -124,5 +125,39 @@ function precondition(
     A::AbstractMatrix) where{uL, uR}
 
     return inv(M.Pl) * A * inv(M.Pr) 
+
+end
+
+function general_precond(
+    M::FactorizationPreconditioner{uL, uR, Left},
+    r::AbstractVector{u}) where {u, uL, uR}
+
+    s = u.(M.Pr \ (M.Pl \ uL.(r)))
+    q = s
+    z = r
+
+    return s, q, z
+end
+
+function general_precond(
+    M::FactorizationPreconditioner{uL, uR, Right},
+    r::AbstractVector{u}) where {u, uL, uR}
+
+    s = r
+    q = u.(M.Pr \ M.Pl \ uR.(r))
+    z = q
+
+    return s, q, z
+end
+
+function general_precond(
+    M::FactorizationPreconditioner{uL, uR, Split},
+    r::AbstractVector{u}) where {u, uL, uR}
+
+    s = u.(M.Pl \ uL.(r))
+    q = u.(M.Pr \ uR.(s))
+    z = s
+
+    return s, q, z
 
 end

@@ -64,8 +64,12 @@ function collect_data(
         # Initialize convergence data structure.
         cd = ConvergenceData{Float64}(n, max_iter)
 
+        println(scheme)
+
         # Run PCG on linear system.
-        pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter)
+        pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter, scheme())
+
+        println("Solved system " * string(i))
 
         # Compute accuracy data (norms of true/updated residuals, errors, etc.)
         compute_accuracy_data!(scheme, ad, cd, ls, preconditioner, i)

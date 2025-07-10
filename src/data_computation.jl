@@ -36,10 +36,24 @@ function compute_accuracy_data!(
     idx::Int) where T
 
     ad.trueresnorm[idx]    =    true_residual_norm(cd, ls)
+
+    println("Computed true residual")
+
     ad.updatedresnorm[idx] = updated_residual_norm(cd, ls)
+
+    println("Computed updated residual")
+
     ad.errornorm[idx]      =           error_Anorm(cd, ls)
+
+    println("Computed A-norm of the error")
+
     ad.resgapnorm[idx]     =       residualgapnorm(cd, ls, scheme, preconditioner)
+
+    println("Computed norm of the residual gap")
+
     ad.max_ratios[idx]     =   max_iterate_ratio(cd, ls.x)
+
+    println("Computed maximum ratios")
     
 end
 
@@ -62,7 +76,7 @@ Compute updated residual norm ||rk|| / ||A|| ||x||
 
 function updated_residual_norm(cd::ConvergenceData, ls::LinearSystem)
     
-    norm_rk = [ norm(cd.updated_residuals[:, k]) for k in 1:cd.iter_number ]
+    norm_rk = [ norm( @view(cd.updated_residuals[:, k]) ) for k in 1:cd.iter_number ]
 
     return inv(ls.normA * ls.normx) .* norm_rk
     
