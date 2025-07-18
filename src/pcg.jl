@@ -27,47 +27,6 @@ function hscg!(convergence_data::ConvergenceData, A, b, x0, max_iter, tol = 1e-1
 
 end
 
-"""
-Left preconditioned CG.
-
-The algorithm is mathematically and numerically equivalent to right 
-preconditioned CG.
-"""
-function pcg!(
-    convergence_data::ConvergenceData,
-    A               ::AbstractMatrix{uA}, 
-    M               ::FactorizationPreconditioner{uL, uR, Left}, # Left preconditioner
-    b               ::Vector{u}, # Right-hand side
-    x0              ::Vector{u}, # Initial guess
-    max_iter        ::Int,
-    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR}
-
-    x = x0
-    r = b - (A * uA.(x0))
-    z = precondition(M, r)          # Usually a sparse triangular preconditioner.
-    p = z
-
-    for k = 1:max_iter
-
-        Ap    = A * uA.(p)
-        rz    = dot(r, z)
-        α     = rz * inv(dot(Ap, p))
-        x     = x + α .* p
-        r     = r - α .* Ap
-
-        convergence_data.iterates[:, k]          = x
-        convergence_data.updated_residuals[:, k] = r
-
-        z     = precondition(M, r)
-        β     = dot(r, z) * inv(rz)
-        p     = z + β .* p
-
-    end
-
-    return x
-    
-end
-
 
 """
 Split preconditioned CG [Algorithm 9.2,Saad 2003].
@@ -78,7 +37,7 @@ by the corresponding unit roundoff / data type.
 function pcg!(
     convergence_data::ConvergenceData,
     A               ::AbstractMatrix{uA}, 
-    M               ::FactorizationPreconditioner{uL, uR, Split},
+    M               ::FactorizationPreconditioner{uL, uR, SaadSplit},
     b               ::Vector{u}, # Right-hand side
     x0              ::Vector{u}, # Initial guess
     max_iter        ::Int,
@@ -117,8 +76,8 @@ function pcg!(
     M               ::FactorizationPreconditioner{uL, uR,<:PreconditioningScheme},
     b               ::Vector{u},
     x0              ::Vector{u},
-    max_iter        ::Int, 
-    scheme          ::PreconditioningScheme) where {u, uA, uL, uR}
+    max_iter        ::Int,
+    tol             ::AbstractFloat = 1e-11) where {u, uA, uL, uR}
 
     x = x0
     r = b - (A * uA.(x0))

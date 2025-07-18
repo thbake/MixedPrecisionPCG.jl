@@ -1,14 +1,17 @@
 using MixedPrecisionPCG
-using LinearAlgebra, MATLAB
+using LinearAlgebra, MATLAB, Random
+
+Random.seed!(1234)
+
 
 # System 1
 # =============================================================================
 
 n1    = 40
-kappa = 10^5
+kappa1 = 10^5
 
 # Construct matrix with prescribed eigenvalues.
-A1 = geomdist_eigvalmatrix(kappa, n1)
+A1 = geomdist_eigvalmatrix(kappa1, n1)
 
 # Choose random solution.
 x1 = rand(n1)
@@ -42,7 +45,7 @@ x2 = A2 \ b2
 
 x0_2 = zeros(n2)
 
-max_iter2 = 150
+max_iter2 = 200
 
 ls2 = LinearSystem(A2, b2, x2, x0_2)
 
@@ -55,23 +58,63 @@ L2  = mat"ichol($A2)"
 # Generate preconditioner using a modified incomplete Cholesky factorization.
 L3 = mat"ichol($A2, struct('michol', 'on'))"
 
+
+# System 4: Dense matrix.
+# =============================================================================
+
+function randsvd_spd(n, mode)
+
+    A = mat"gallery('randsvd', [$n,$n], 1e12, $mode);"
+    sva = svd(A).S;
+    V   = qr(rand(n,n)).Q;
+    A  = V * diagm(sva) * V';
+    A  = 0.5 * (A + A');
+
+    return A
+
+end
+
+n4   = 500;
+A4   = randsvd_spd(n4, 1) # Fast singular value decay.
+b4   = rand(n4);
+L4   = low_precision_preconditioner(A4, tol=1e-4);
+x4   = A4 \ b4;
+x0_4 = zeros(n4);
+
+kappa4   = cond(Matrix(A4));
+kappaM4 = cond(Matrix(L4 * L4'));
+
+max_iter4 = 300;
+
+ls4  = LinearSystem(A4, b4, x4, x0_4);
+
+A5  = randsvd_spd(n4, 2) # Slow singular value decay.
+L5   = low_precision_preconditioner(A5, tol=1e-4);
+x5  = A5 \ b4;
+
+ls5 = LinearSystem(A5, b4, x5, x0_4)
+
+
 # Set precisions
 d = Float64
 s = Float32
 h = Float16
 
+# Set unit roundoff values
+ud = 0.5 * eps(d)
+us = 0.5 * eps(s)
+uh = 0.5 * eps(h)
+
 splitpcg_precisions = [(d, d), (d, s), (s, d), (s, s), (d, h)]
 leftpcg_precisions  = [d, s, h]
 
-#v_ls       = [      ls1,       ls2,       ls2]
-#v_prec     = [       L1,        L2,        L3]
-#iterations = [max_iter1, max_iter2, max_iter2]
-v_ls       = [ls1, ]
-v_prec     = [L1, ]
-iterations = [max_iter1, ]
+v_ls       = [      ls1,       ls2,        ls4,       ls5]
+v_prec     = [       L1,        L2,         L4,        L5]
+iterations = [max_iter1, max_iter2,  max_iter4, max_iter4]
 
-v_ad_left  = runpcgexperiments(Left,  v_ls, v_prec, iterations, leftpcg_precisions)
-v_ad_split = runpcgexperiments(Split, v_ls, v_prec, iterations, splitpcg_precisions)
+v_ad_left      = runpcgexperiments(Left,      v_ls, v_prec, iterations, leftpcg_precisions)
+v_ad_split     = runpcgexperiments(Split,     v_ls, v_prec, iterations, splitpcg_precisions)
+v_ad_saadsplit = runpcgexperiments(SaadSplit, v_ls, v_prec, iterations, splitpcg_precisions)
 
 #splitpcg_precisions = [(s, d)]
 kappa_range         = 10.0 .^collect(2:2:10)

@@ -1,7 +1,8 @@
 using MATLAB
 
 # Exported structs
-export AbstractPreconditioner, FactorizationPreconditioner, PreconditioningScheme, Left, Split, Right
+export AbstractPreconditioner, AbstractSplit, FactorizationPreconditioner, 
+       PreconditioningScheme, Left, Split, Right, SaadSplit
 
 # Exported functions
 export precondition, precondition!, getprecisions
@@ -14,9 +15,11 @@ Construction and application of preconditioner.
 Abstract tupe representing how the preconditioner will be applied.
 """
 abstract type PreconditioningScheme end
-struct Left  <: PreconditioningScheme end 
-struct Right <: PreconditioningScheme end 
-struct Split <: PreconditioningScheme end 
+abstract type AbstractSplit <: PreconditioningScheme end
+struct Left      <: PreconditioningScheme end 
+struct Right     <: PreconditioningScheme end 
+struct Split     <: AbstractSplit end 
+struct SaadSplit <: AbstractSplit end
 
 """
 Abstract type representing a general notion of a preconditioner.
@@ -73,7 +76,7 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
 
 end
 
-function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Split}) where {uL, uR}
+function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, AbstractSplit}) where {uL, uR}
 
     return eltype(preconditioner.Pl), eltype(preconditioner.Pr)
 
@@ -87,12 +90,7 @@ end
 
 
 precondition(
-    M::FactorizationPreconditioner{uL, uR, Left},
-    v::AbstractVector{u}) where {u, uL, uR} =  u.(M.Pr \ (M.Pl \ uL.(v)))
-
-
-precondition(
-    M::FactorizationPreconditioner{uL, uR, Split},
+    M::FactorizationPreconditioner{uL, uR, SaadSplit},
     r::AbstractVector{u}) where {u, uL, uR} = M.Pr \ uR.(M.Pl \ uL.(r))
 
 function precondition(Ms::AbstractMatrix{uS}, v::Vector{u}) where {uS <: AbstractFloat, u <:AbstractFloat} 
@@ -102,7 +100,7 @@ function precondition(Ms::AbstractMatrix{uS}, v::Vector{u}) where {uS <: Abstrac
 end
 
 function precondition!(
-    M::FactorizationPreconditioner{uL, uR, Split},
+    M::FactorizationPreconditioner{uL, uR, SaadSplit},
     v::Vector{u}) where {u, uL, uR}
 
     v .= u.(M.Pl \ uL.(v)) # Change variable in place.
@@ -113,15 +111,7 @@ function precondition!(
 end
 
 function precondition(
-    M::FactorizationPreconditioner{uL, uR, Left},
-    A::AbstractMatrix) where{uL, uR}
-
-    return inv(M.Pl * M.Pr) * A
-
-end
-
-function precondition(
-    M::FactorizationPreconditioner{uL, uR, Split},
+    M::FactorizationPreconditioner{uL, uR, SaadSplit},
     A::AbstractMatrix) where{uL, uR}
 
     return inv(M.Pl) * A * inv(M.Pr) 

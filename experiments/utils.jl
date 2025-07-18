@@ -37,7 +37,7 @@ function getprecisions(scheme::Type{Left}, precisions::Type{<:AbstractFloat})
 
 end
 
-function getprecisions(scheme::Type{Split}, precisions::Tuple{Type, Type})
+function NumericalExperiments.getprecisions(scheme::Type{<:AbstractSplit}, precisions::Tuple{Type, Type})
 
     return precisions[1], precisions[2]
 end
@@ -67,7 +67,7 @@ function collect_data(
         println(scheme)
 
         # Run PCG on linear system.
-        pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter, scheme())
+        pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter)
 
         println("Solved system " * string(i))
 

@@ -110,7 +110,7 @@ function error_Anorm(cd::ConvergenceData, ls::LinearSystem)
     errornorm = zeros(cd.iter_number)
 
     xk            = cd.iterates
-    initial_error = A_norm(ls.A, ls.x - ls.x0)
+    denominator   = sqrt(norm(ls.A)) * norm(ls.x)
 
     for k in 1:cd.iter_number
 
@@ -118,7 +118,7 @@ function error_Anorm(cd::ConvergenceData, ls::LinearSystem)
 
     end
 
-    return inv(initial_error) .* errornorm 
+    return inv(denominator) .* errornorm 
 
 
 end
@@ -135,7 +135,9 @@ process_residuals(rk::AbstractMatrix, ::Left, ::AbstractMatrix)    = rk
 Process residuals rk for computing the residual gap. In the split preconditioned
 case we need to unprecondition the residuals at each iteration.
 """
-process_residuals(rk::AbstractMatrix, ::Split, ML::AbstractMatrix) = ML * rk
+process_residuals(rk::AbstractMatrix, ::Split, ML::AbstractMatrix) = rk
+
+process_residuals(rk::AbstractMatrix, ::SaadSplit, ML::AbstractMatrix) = ML * rk
 
 
 """

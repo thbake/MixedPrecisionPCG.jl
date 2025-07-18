@@ -1,6 +1,6 @@
 using Plots, LaTeXStrings, MixedPrecisionPCG
 
-export plot_accuracy_data, condition_plot
+export plot_accuracy_data, generate_plots, splitprec_comparison
 
 function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) where {uL, uR}
 
@@ -10,14 +10,14 @@ function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) whe
 
 end
 
-function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Split}) where {uL, uR}
+function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, AbstractSplit}) where {uL, uR}
 
     left_precision, right_precision = getprecisions(preconditioner)
     return  L"$u_L = $" * string(left_precision) * L", $u_R = $" * string(right_precision) 
 
 end
 
-function getlabels(precisions::AbstractVector, label_dict, ::Split)
+function getlabels(precisions::AbstractVector, label_dict, ::AbstractSplit)
 
     labels = Vector{String}(undef, length(precisions))
 
@@ -76,19 +76,21 @@ function sample_data(data::Vector{<:AbstractVector}, step::Int)
 
 end
 
-gettitle(::Left)  = "Mixed precision left PCG"
-gettitle(::Split) = "Mixed precision split PCG"
+gettitle(::Left)      = "Mixed precision left PCG"
+gettitle(::Split)     = "Mixed precision split PCG"
+gettitle(::SaadSplit) = "Mixed precision Saad's split PCG"
 
 
 
 resgapnorm_label(::Left)  = L"$\frac{||b - Ax_k - r_k||}{||A|| ||x||}$"
 
-resgapnorm_label(::Split) = L"$\frac{||b - Ax_k - M_L \hat{r}_k||}{||A|| ||x||}$"
+resgapnorm_label(::AbstractSplit) = L"$\frac{||b - Ax_k - M_L \hat{r}_k||}{||A|| ||x||}$"
 
-function plot_accuracy_data(
+function generate_plots(
     ad        ::AccuracyData,
     precisions::AbstractVector,
     scheme    ::Type{<:PreconditioningScheme},
+    ylabel    ::Bool = true,
     step       ::Int = 1)
 
     label_dict = Dict(
@@ -103,8 +105,8 @@ function plot_accuracy_data(
     default(
         yscale     = :log10, 
         legend     = :bottomright,
-        markersize = 2,
-        marker = :circle,
+        #markersize = 2,
+        #marker     = :circle,
         alpha      = 0.5,
         label      = labels,
         linestyle  = :solid,
@@ -112,129 +114,58 @@ function plot_accuracy_data(
         lw         = 1,
         legendfontsize = 7,
         ylabelfontsize = 6,
+        xlabel = L"$k$"
         #xticks     = (1:49:200)
     )
     #scatter(x=(@view xs[1:1000:end]), y=(@view ys[1:1000:end]))
     #
+    process_ylabel(string, ylabel::Bool) = ylabel ? string : ""
 
     p1 = plot(
         sample_data(ad.trueresnorm, step),
         #ad.trueresnorm,
-        ylabel = L"$\frac{||b - Ax_k||}{||A|| ||x||}$",
-        legend = false
+        ylabel = process_ylabel(L"$\frac{||b - A\hat{x}_k||}{||A|| ||x||}$", ylabel),
+        legend = !ylabel ? :topright : false
         
     )
 
     p2 = plot(
         sample_data(ad.updatedresnorm, step),
-        ylabel = L"$\frac{||r_k||}{||A|| ||x||}$",
-        legend = false
+        ylabel = process_ylabel(L"$\frac{||\hat{r}_k||}{||A|| ||x||}$", ylabel),
+        legend = :none
     )
 
     p3 = plot(
         sample_data(ad.errornorm, step),
-        ylabel = L"$\frac{||x - x_k||_A}{||x - x_0||_A}$",
-        legend = false
+        ylabel = process_ylabel(L"$\frac{||x - \hat{x}_k||_A}{||A||^{1/2} ||x||}$", ylabel),
+        legend = :none
     )
 
-    p4 = plot(
-        sample_data(ad.resgapnorm, step),
-        ylabel = resgapnorm_label(scheme()),
-        #yticks = 10.0 .^ collect(-17:2:0)
-        yticks = :auto,
-        legend = false
-        
-    )
+    return p1, p2, p3
 
-    # Invisible plot for showing one legend
-    invisible_data = [NaN for _ in 1:length(precisions)]'
+end
 
-    p5 = plot(
-        invisible_data,
-        legend     = true, 
-        framestyle = :none
-    )
-
-    p6 = plot(
-        invisible_data,
-        legend     = false,
-        framestyle = :none
-    )
+function plot_accuracy_data(plot_list, layout_matrix)
 
     p = plot(
-        p1, p2, p5, p3, p4, p6, 
-        layout = @layout([a b c{0.3w}; e d f{0.3w}]))
-
+        plot_list...,
+        layout = layout_matrix
+    )
     display(p)
+        
+end
+
+function splitprec_comparison(ad_split, ad_split_saad, precisions)
+
+    p1, p2, p3 = generate_plots(ad_split,      precisions, Split)
+    p4, p5, p6 = generate_plots(ad_split_saad, precisions, SaadSplit, false)
+
+    plot_list = [p1, p4, p2, p5, p3, p6] 
+
+    plot_accuracy_data(plot_list, (3,2))
 
 end
 
 getexponent(number::AbstractFloat) = Int( floor( log10( number ) ) )
 
-function condition_plot(
-    ad_vec          ::Vector{AccuracyData},
-    kappa_range     ::Vector{Float64},
-    kappa_range_prec::Vector{Float64},
-    precision       ::Type{<:AbstractFloat},
-    n               ::Int)
 
-    default(
-        yscale   = :log10,
-        legend   = :topright,
-        ylabel   = L"$\frac{||b - A x_k - M_L \hat{r}_k ||}{||A|| ||x||}$"
-    )
-
-    p = plot()
-
-    colors = palette(:Dark2_5)
-
-
-    for i in eachindex(kappa_range)
-
-        kappa_exponent = getexponent( kappa_range[i] )
-
-        # Get number of steps that it takes the iterate to remain essentially unchanged.
-        _, S = findmin(ad_vec[i].errornorm[1]) 
-
-        # First (and in this case only) entry in the dictionary.
-        max_ratio, max_ratio_idx = ad_vec[i].max_ratios[1]
-
-        uL_kappa = upper_bound(kappa_range_prec[i], precision, Float64, n, S, max_ratio)
-
-        label = raw"$U[\kappa(A)] \approx 10^{" * string( getexponent(uL_kappa) ) * raw"}, \;$" * raw"$\kappa(A) = 10^{" * string(kappa_exponent) * raw"}$" 
-        println(kappa_range_prec[i])
-        #label = raw"$\kappa(M_L) = 10^{" * string( log10(kappa_range[i]) ) * raw"}$"
-        color = colors[i]
-
-        plot!(
-            ad_vec[i].resgapnorm,
-            label   = "",
-            ls      = :dot,
-            lw      = 2,
-            lc      = color,
-            legend  = true
-        )
-
-        plot!(
-        [uL_kappa for _ in 1:ad_vec[i].iter_number], 
-            linestyle   = :solid,
-            label       = label,
-            linecolor   = color
-        )
-
-        scatter!(
-            [max_ratio_idx], 
-            [1.0],
-            marker      = :cross,
-            markercolor = color,
-            label       = "",
-        )
-
-
-    end
-
-    display(p)
-
-end
-
-#scatter!([idx[2]], [1.0], marker = :xcross, markercolor = :black, label = L"$max_j ||x_j||$")
