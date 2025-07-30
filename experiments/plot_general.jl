@@ -1,6 +1,6 @@
 using Plots, LaTeXStrings, MixedPrecisionPCG
 
-export plot_accuracy_data, generate_plots, splitprec_comparison
+export plot_accuracy_data, generate_plots, splitprec_comparison, plot_eigenvalues
 
 function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) where {uL, uR}
 
@@ -90,6 +90,7 @@ function generate_plots(
     ad        ::AccuracyData,
     precisions::AbstractVector,
     scheme    ::Type{<:PreconditioningScheme},
+    palette   ::Symbol,
     ylabel    ::Bool = true,
     step       ::Int = 1)
 
@@ -104,28 +105,26 @@ function generate_plots(
 
     default(
         yscale     = :log10, 
-        legend     = :bottomright,
-        #markersize = 2,
+        #markersize = 1,
         #marker     = :circle,
-        alpha      = 0.5,
-        label      = labels,
+        alpha      = 0.9,
         linestyle  = :solid,
-        palette    = :Dark2_5,
+        palette    = palette,
         lw         = 1,
         legendfontsize = 7,
         ylabelfontsize = 6,
         xlabel = L"$k$"
         #xticks     = (1:49:200)
     )
-    #scatter(x=(@view xs[1:1000:end]), y=(@view ys[1:1000:end]))
-    #
     process_ylabel(string, ylabel::Bool) = ylabel ? string : ""
 
     p1 = plot(
         sample_data(ad.trueresnorm, step),
         #ad.trueresnorm,
         ylabel = process_ylabel(L"$\frac{||b - A\hat{x}_k||}{||A|| ||x||}$", ylabel),
-        legend = !ylabel ? :topright : false
+        label = labels,
+        #legend = !ylabel ? :topright : false
+        legend = :topright
         
     )
 
@@ -157,8 +156,19 @@ end
 
 function splitprec_comparison(ad_split, ad_split_saad, precisions)
 
-    p1, p2, p3 = generate_plots(ad_split,      precisions, Split)
-    p4, p5, p6 = generate_plots(ad_split_saad, precisions, SaadSplit, false)
+    p1, p2, p3 = generate_plots(ad_split,      precisions, Split, :tab20)
+    p4, p5, p6 = generate_plots(ad_split_saad, precisions, SaadSplit, :tab20, false)
+
+    plot_list = [p1, p4, p2, p5, p3, p6] 
+
+    plot_accuracy_data(plot_list, (3,2))
+
+end
+
+function leftsplit_comparison(ad_left, ad_split, left_precisions, split_precisions)
+
+    p1, p2, p3 = generate_plots(ad_left,   left_precisions, Left, :Dark2_5)
+    p4, p5, p6 = generate_plots(ad_split, split_precisions, Split, :Set1_9, false)
 
     plot_list = [p1, p4, p2, p5, p3, p6] 
 
@@ -167,5 +177,29 @@ function splitprec_comparison(ad_split, ad_split_saad, precisions)
 end
 
 getexponent(number::AbstractFloat) = Int( floor( log10( number ) ) )
+
+function plot_eigenvalues(A)
+
+    eigs = eigvals(Matrix(A))
+    
+    ploteigs = [(λ, 0.0) for λ in eigs]
+
+    l = @layout [a;b]
+
+    p1 = histogram(eigs, palette = cgrad(:blues).colors, yscale = :log10, bins = :scott)
+
+    p2 = plot(
+        ploteigs, 
+        marker      = :xcross,
+        markercolor = :red,
+        linecolor   = :black,
+        ylims       = (-1,1),
+        xscale       = :identity,
+        label       = L"$\lambda \in \Lambda (A)$")
+
+    p = plot(p1, p2, layout = l)
+
+    display(p)
+end
 
 
