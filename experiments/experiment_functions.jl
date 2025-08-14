@@ -2,7 +2,7 @@ using MixedPrecisionPCG
 using Random, MATLAB
 
 export runpcgexperiments, geomdist_eigvalmatrix, low_precision_preconditioner,
-       cond_experiment,  upper_bound
+       cond_experiment,  upper_bound, strakos_mat, randsvd_spd, mat_prec
 
 Random.seed!(1234)
 
@@ -131,22 +131,57 @@ function cond_experiment(
     return ad_vector, kappa_range_prec
 end
 
-function upper_bound(
-    kappa    ::Float64,
-    pL       ::DataType,
-    pA       ::DataType,
-    n        ::Int,
-    S        ::Int,
-    max_ratio::Float64)
+function randsvd_spd(n, mode, cutoff, α = 0.0)
 
-    u  = 0.5 * eps(Float64)
-    uL = 0.5 * eps(pL)
-    uA = 0.5 * eps(pA)
+    A = mat"gallery('randsvd', [$n,$n], 1e8, $mode);"
+    sva = svd(A).S;
+    V   = qr(rand(n,n)).Q;
+    A  = V * diagm(sva) * V';
+    A  = 0.5 * (A + A');
 
-    bound_u  = u  * (max_iter + 1 + (1 + 10max_iter) * max_ratio)
-    bound_uA = uA * sqrt(n) * (2max_iter + 1)        * max_ratio
-    bound_uL = uL * n^(3/2) * kappa^2 * 2max_iter    * max_ratio
+    prec_eigvals = vcat(sva[1:cutoff], [sva[cutoff] for _ in 1:n-cutoff])
 
-    return bound_u + bound_uA + bound_uL
+    M = V * diagm(prec_eigvals) * V'
+    M = 0.5 * (M + M') 
+
+    M[n,n] += α
+
+    #L = low_precision_preconditioner(M, tol = 1e-4) 
+    L = cholesky(M).L
+
+    return A, L
+
+end
+
+strakos_mat(n, l1, ln, rho) = diagm(vcat([l1], [l1 + (i - 1)/(n - 1) * (ln - l1) * rho^(n - i) for i in 2:n-1], [ln]))
+
+function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
+
+   A = strakos_mat(n, l1, ln, rho)
+
+   eigs = diag(A)
+
+   # Truncate first n - "cutoff" eigenvalues <=> Preserve first "cutoff" eigenvalues.
+   prec_eigvals = vcat(eigs[1:cutoff], [eigs[cutoff] for _ in 1:n-cutoff])
+
+   M = diagm(prec_eigvals)
+
+   L = cholesky(M).L
+
+   #println(cond((L \ M) / L'))
+
+   return A, L
+
+end
+
+_largest_iter(ac::AccuracyData, tol) = (collect(1:ac.iter_number)[ac.trueresnorm[1] .<= tol])[1]
+
+function upper_bound(ac::AccuracyData, kappaM::AbstractFloat, n::Int, tol = 1e-15)
+
+    u = 0.5 * eps(Float64)
+
+    k = _largest_iter(ac, tol)
+
+    return n * k^2 * u * sqrt(kappaM)
 
 end

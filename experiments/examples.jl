@@ -62,28 +62,6 @@ L3 = mat"ichol($A2, struct('michol', 'on'))"
 # System 4: Dense matrix.
 # =============================================================================
 
-function randsvd_spd(n, mode, cutoff, α = 0.0)
-
-    A = mat"gallery('randsvd', [$n,$n], 1e8, $mode);"
-    sva = svd(A).S;
-    V   = qr(rand(n,n)).Q;
-    A  = V * diagm(sva) * V';
-    A  = 0.5 * (A + A');
-
-    prec_eigvals = vcat(sva[1:cutoff], [sva[cutoff] for _ in 1:n-cutoff])
-
-    M = V * diagm(prec_eigvals) * V'
-    M = 0.5 * (M + M') 
-
-    M[n,n] += α
-
-    #L = low_precision_preconditioner(M, tol = 1e-4) 
-    L = cholesky(M).L
-
-    return A, L
-
-end
-
 n4   = 300;
 #A4   = randsvd_spd(n4, 1) # Fast singular value decay.
 b4   = rand(n4);
@@ -111,31 +89,9 @@ ls5 = LinearSystem(A5, b4, x5, x0_4)
 # Example 6: Strakos Matrix with eigenvalues accumulated to the left.
 # ==================================================================
 
-strakos_mat(n, l1, ln, rho) = diagm(vcat([l1], [l1 + (i - 1)/(n - 1) * (ln - l1) * rho^(n - i) for i in 2:n-1], [ln]))
-
-function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
-
-   A = strakos_mat(n, l1, ln, rho)
-
-   eigs = diag(A)
-
-   #V   = qr(rand(n,n)).Q;
-
-   # Truncate first n - "cutoff" eigenvalues <=> Preserve first "cutoff" eigenvalues.
-   prec_eigvals = vcat(eigs[1:cutoff], [eigs[cutoff] for _ in 1:n-cutoff])
-
-   M = diagm(prec_eigvals)
-
-   L = cholesky(M).L
-
-   println(cond((L \ M) / L'))
-
-   return A, L
-
-end
 
 n6        = 85
-A6, L6    = mat_prec(n6, 1.0, 1e+5, 0.6, 1)
+A6, L6    = mat_prec(n6, 1.0, 1e+5, 0.6, 65)
 M6        = Symmetric(L6 * L6')
 b6        = inv(sqrt(n6)) .* ones(n6)
 x6        = A6\b6
@@ -176,11 +132,10 @@ iterations = [max_iter1,  max_iter4, max_iter6]
 #v_prec     = [       L4,        L5]
 #iterations = [max_iter4, max_iter4]
 
-v_ad_left      = runpcgexperiments(Left,      v_ls, v_prec, iterations, leftpcg_precisions)
-v_ad_split     = runpcgexperiments(Split,     v_ls, v_prec, iterations, splitpcg_precisions)
-v_ad_saadsplit = runpcgexperiments(SaadSplit, v_ls, v_prec, iterations, splitpcg_precisions)
+v_ad_left      = runpcgexperiments(Left,      v_ls, v_prec, iterations, leftpcg_precisions);
+v_ad_split     = runpcgexperiments(Split,     v_ls, v_prec, iterations, splitpcg_precisions);
+v_ad_saadsplit = runpcgexperiments(SaadSplit, v_ls, v_prec, iterations, splitpcg_precisions);
 
 #splitpcg_precisions = [(s, d)]
-kappa_range         = 10.0 .^collect(2:2:10)
 
 #ad_vec, kappa_range_prec = cond_experiment(Split, splitpcg_precisions, 1e-4 , kappa_range, 150)

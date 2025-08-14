@@ -86,11 +86,14 @@ resgapnorm_label(::Left)  = L"$\frac{||b - Ax_k - r_k||}{||A|| ||x||}$"
 
 resgapnorm_label(::AbstractSplit) = L"$\frac{||b - Ax_k - M_L \hat{r}_k||}{||A|| ||x||}$"
 
+#@recipe function f()
+
 function generate_plots(
     ad        ::AccuracyData,
     precisions::AbstractVector,
     scheme    ::Type{<:PreconditioningScheme},
     palette   ::Symbol,
+    upperbound::AbstractFloat,
     ylabel    ::Bool = true,
     step       ::Int = 1)
 
@@ -105,8 +108,6 @@ function generate_plots(
 
     default(
         yscale     = :log10, 
-        #markersize = 1,
-        #marker     = :circle,
         alpha      = 0.9,
         linestyle  = :solid,
         palette    = palette,
@@ -114,13 +115,11 @@ function generate_plots(
         legendfontsize = 7,
         ylabelfontsize = 6,
         xlabel = L"$k$"
-        #xticks     = (1:49:200)
     )
     process_ylabel(string, ylabel::Bool) = ylabel ? string : ""
 
     p1 = plot(
-        sample_data(ad.trueresnorm, step),
-        #ad.trueresnorm,
+    [sample_data(ad.trueresnorm, step), repeat([upperbound], ad.iter_number )],
         ylabel = process_ylabel(L"$\frac{||b - A\hat{x}_k||}{||A|| ||x||}$", ylabel),
         label = labels,
         #legend = !ylabel ? :topright : false
@@ -165,10 +164,10 @@ function splitprec_comparison(ad_split, ad_split_saad, precisions)
 
 end
 
-function leftsplit_comparison(ad_left, ad_split, left_precisions, split_precisions)
+function leftsplit_comparison(ad_left, ad_split, left_precisions, split_precisions, upperbound)
 
-    p1, p2, p3 = generate_plots(ad_left,   left_precisions, Left, :Dark2_5)
-    p4, p5, p6 = generate_plots(ad_split, split_precisions, Split, :Set1_9, false)
+    p1, p2, p3 = generate_plots(ad_left,   left_precisions, Left, :Dark2_5, upperbound)
+    p4, p5, p6 = generate_plots(ad_split, split_precisions, Split, :Set1_9, upperbound, false)
 
     plot_list = [p1, p4, p2, p5, p3, p6] 
 
@@ -201,5 +200,7 @@ function plot_eigenvalues(A)
 
     display(p)
 end
+
+
 
 

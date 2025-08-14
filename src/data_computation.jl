@@ -3,6 +3,23 @@ using LinearAlgebra
 export AccuracyData
 export compute_accuracy_data!
 
+"""
+    AccuracyData{T}(iter_number, trueresnorm, updatedresnorm, errornorm,
+        resgapnorm, max_ratios)
+
+    Structure holding accuracy measures of different PCG runs as iterations go by.
+
+    
+# Arguments
+- `iter_number::Int`: Number of iterations
+- `trueresnorm::Vector{Vector{T}}`: Vector true residual norms of different PCG runs.
+- `updatedresnorm::Vector{Vector{T}}`
+- `errornorm::Vector{Vector{T}}`
+- `resgapnorm::Vector{Vector{T}}`
+- `max_ratios::Dict{Int, Tuple{Float64, Int}}`
+   
+    
+"""
 mutable struct AccuracyData{T}
 
     iter_number   ::Int
