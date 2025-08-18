@@ -1,3 +1,4 @@
+using Base: upperbound
 using MixedPrecisionPCG
 using LinearAlgebra, MATLAB, Random
 
@@ -97,6 +98,9 @@ b6        = inv(sqrt(n6)) .* ones(n6)
 x6        = A6\b6
 max_iter6 = 500
 
+kappaA6 = cond(A6)
+kappaM6 = cond(M6)
+
 splitprecA = (L6 \ A6) / (L6')
 leftprecA  = M6 \ A6
 
@@ -132,10 +136,10 @@ iterations = [max_iter1,  max_iter4, max_iter6]
 #v_prec     = [       L4,        L5]
 #iterations = [max_iter4, max_iter4]
 
-v_ad_left      = runpcgexperiments(Left,      v_ls, v_prec, iterations, leftpcg_precisions);
-v_ad_split     = runpcgexperiments(Split,     v_ls, v_prec, iterations, splitpcg_precisions);
-v_ad_saadsplit = runpcgexperiments(SaadSplit, v_ls, v_prec, iterations, splitpcg_precisions);
+v_ads_left      = runpcgexperiments(Left,      v_ls, v_prec, iterations, leftpcg_precisions);
+v_ads_split     = runpcgexperiments(Split,     v_ls, v_prec, iterations, splitpcg_precisions);
+v_ads_saadsplit = runpcgexperiments(SaadSplit, v_ls, v_prec, iterations, splitpcg_precisions);
 
-#splitpcg_precisions = [(s, d)]
-
-#ad_vec, kappa_range_prec = cond_experiment(Split, splitpcg_precisions, 1e-4 , kappa_range, 150)
+# Compute upper bounds
+ub_residual = upper_bound(v_ads_left[3], kappaM6, 1.0,     n6)
+ub_error    = upper_bound(v_ads_left[3], kappaM6, kappaA6, n6)

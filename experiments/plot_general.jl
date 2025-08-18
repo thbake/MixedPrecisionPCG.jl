@@ -1,6 +1,8 @@
 using Plots, LaTeXStrings, MixedPrecisionPCG
 
-export plot_accuracy_data, generate_plots, splitprec_comparison, plot_eigenvalues
+export plot_accuracy_data, generate_plots, splitprec_comparison, get_ylabel,
+       plot_eigenvalues, TrueResNorm, UpdatedResNorm, ErrorNorm
+    
 
 function getlabel(preconditioner::FactorizationPreconditioner{uL, uR, Left}) where {uL, uR}
 
@@ -86,17 +88,51 @@ resgapnorm_label(::Left)  = L"$\frac{||b - Ax_k - r_k||}{||A|| ||x||}$"
 
 resgapnorm_label(::AbstractSplit) = L"$\frac{||b - Ax_k - M_L \hat{r}_k||}{||A|| ||x||}$"
 
-#@recipe function f()
 
-function generate_plots(
-    ad        ::AccuracyData,
-    precisions::AbstractVector,
-    scheme    ::Type{<:PreconditioningScheme},
-    palette   ::Symbol,
-    upperbound::AbstractFloat,
-    ylabel    ::Bool = true,
-    step       ::Int = 1)
+# Wrappers
+# ===================
+abstract type AbstractWrapper end
 
+Base.length(gw::AbstractWrapper)               = length(aw.ads)
+Base.getindex(gw::AbstractWrapper, i::Integer) = aw.ads[i]
+Base.eachindex(gw::AbstractWrapper)            = eachindex(aw.ads)
+
+struct TrueResNorm <: AbstractWrapper
+    ads::AccuracyDataSeries
+end
+
+struct UpdatedResNorm <: AbstractWrapper
+    ads::AccuracyDataSeries
+end
+
+struct ErrorNorm <: AbstractWrapper
+    ads::AccuracyDataSeries
+end
+
+struct GenericWrapper <:AbstractWrapper
+    ads::AccuracyDataSeries
+end
+
+@recipe trn(::Type{TrueResNorm},    trn::TrueResNorm)    = [trn.ads[i].trueresnorm    for i in eachindex(trn.ads)]
+@recipe urn(::Type{UpdatedResNorm}, urn::UpdatedResNorm) = [urn.ads[i].updatedresnorm for i in eachindex(urn.ads)]
+@recipe  en(::Type{ErrorNorm},       en::ErrorNorm)      = [ en.ads[i].errornorm      for i in eachindex( en.ads)]
+@recipe  gw(::Type{GenericWrapper},  gw::GenericWrapper) = TrueResNorm(gw.ads)
+
+get_ylabel(::Type{TrueResNorm})    = L"$\frac{||b - A\hat{x}_k||}{||A|| ||x||}$"
+get_ylabel(::Type{UpdatedResNorm}) = L"$\frac{||\hat{r}_k||}{||A|| ||x||}$"
+get_ylabel(::Type{ErrorNorm})      = L"$\frac{||x - \hat{x}_k||_A}{||A||^{1/2} ||x||}$"
+
+
+@userplot AccuracyPlot
+@recipe function f(
+    ap          ::AccuracyPlot;
+    precisions  ::AbstractVector,
+    scheme      ::Type{<:PreconditioningScheme},
+    legend_param = true::Bool,
+    ylabel_param = true::Bool,
+    upperbound  ::Float64)
+   
+    # Generate labels
     label_dict = Dict(
 
         Float64 => "d",
@@ -104,76 +140,91 @@ function generate_plots(
         Float16 => "h"
     )
 
-    labels = getlabels(precisions, label_dict, scheme())
+    # Extract y from the args
+    y = ap.args
 
-    default(
-        yscale     = :log10, 
-        alpha      = 0.9,
-        linestyle  = :solid,
-        palette    = palette,
-        lw         = 1,
-        legendfontsize = 7,
-        ylabelfontsize = 6,
-        xlabel = L"$k$"
-    )
-    process_ylabel(string, ylabel::Bool) = ylabel ? string : ""
+    alpha          --> 0.9
+    labels         --> cat([""], getlabels(precisions, label_dict, scheme()); dims = 2)
+    legend         := legend_param ? :topright : :none
+    legendfontsize --> 7
+    linestyle      --> :solid
+    xlabel         --> L"$k$"
+    ylabelfontsize --> 6
+    ylabel         := ylabel_param ? get_ylabel(eltype(y)) : ""
+    yscale         --> :log10
 
-    p1 = plot(
-    [sample_data(ad.trueresnorm, step), repeat([upperbound], ad.iter_number )],
-        ylabel = process_ylabel(L"$\frac{||b - A\hat{x}_k||}{||A|| ||x||}$", ylabel),
-        label = labels,
-        #legend = !ylabel ? :topright : false
-        legend = :topright
-        
-    )
-
-    p2 = plot(
-        sample_data(ad.updatedresnorm, step),
-        ylabel = process_ylabel(L"$\frac{||\hat{r}_k||}{||A|| ||x||}$", ylabel),
-        legend = :none
-    )
-
-    p3 = plot(
-        sample_data(ad.errornorm, step),
-        ylabel = process_ylabel(L"$\frac{||x - \hat{x}_k||_A}{||A||^{1/2} ||x||}$", ylabel),
-        legend = :none
-    )
-
-    return p1, p2, p3
+    @series begin
+        linestyle := :dash
+        #label --> L"n k^2 u \kappa(M)^{1/2}"
+        label --> "bound"
+        legend := :none
+        repeat([upperbound], get_iternumber(y[1].ads))
+    end
+    return y 
 
 end
 
-function plot_accuracy_data(plot_list, layout_matrix)
+function compplot(
+    ads_pair   ::Tuple{AccuracyDataSeries, AccuracyDataSeries},
+    prec_pair  ::Tuple{AbstractVector, AbstractVector}, 
+    scheme_pair::Tuple{T, T}) where T <: Type
 
-    p = plot(
-        plot_list...,
-        layout = layout_matrix
-    )
-    display(p)
-        
+    layout = (3,2)
+
+    p = Vector{Plots.Plot{Plots.GRBackend}}(undef, 6)
+    
+    i = 0
+
+    for (ads, prec, scheme) in zip(ads_pair, prec_pair, scheme_pair)
+
+        i += 1
+
+        bool_ylabel = Bool(1 % i)
+
+        for (j, wrapper) in enumerate((TrueResNorm, UpdatedResNorm, ErrorNorm))
+
+            bool_legend = Bool(1 % j)
+
+            p[i + (j - 1) * (3 - 1) ] = accuracyplot(
+                wrapper(ads),
+                precisions   = prec,
+                scheme       = scheme,
+                legend_param = !bool_legend,
+                ylabel_param = !bool_ylabel,
+                upperbound   = 1e-10)
+
+        end
+
+    end
+
+    plot(p..., layout = layout)
 end
 
-function splitprec_comparison(ad_split, ad_split_saad, precisions)
+function f(
+    ads1       ::AccuracyDataSeries,
+    ads2       ::AccuracyDataSeries,
+    prec_pair  ::Tuple{AbstractVector, AbstractVector}, 
+    scheme_pair::Tuple{T, T}) where T <: Type
 
-    p1, p2, p3 = generate_plots(ad_split,      precisions, Split, :tab20)
-    p4, p5, p6 = generate_plots(ad_split_saad, precisions, SaadSplit, :tab20, false)
-
-    plot_list = [p1, p4, p2, p5, p3, p6] 
-
-    plot_accuracy_data(plot_list, (3,2))
-
+    #println("hello")
+    
+    
+    #layout := (1,2)
+    #@series begin
+    #    accuracyplot(ErrorNorm(ads1), precisions = prec_pair[1], scheme = scheme_pair[1])
+    #end
+    #@series begin
+    #    subplot := 2
+    #    accuracyplot(ErrorNorm(ads2), precisions = prec_pair[2], scheme = scheme_pair[2])
+    #end
+    p1, p2 = prec_pair
+    s1, s2 = scheme_pair
+    #accuracyplot(ErrorNorm(ads1), precisions = prec_pair[1], scheme = scheme_pair[1])
+    @series begin
+        return accuracyplot(ErrorNorm(ads1), precisions = p1, scheme = s1)
+    end
 end
 
-function leftsplit_comparison(ad_left, ad_split, left_precisions, split_precisions, upperbound)
-
-    p1, p2, p3 = generate_plots(ad_left,   left_precisions, Left, :Dark2_5, upperbound)
-    p4, p5, p6 = generate_plots(ad_split, split_precisions, Split, :Set1_9, upperbound, false)
-
-    plot_list = [p1, p4, p2, p5, p3, p6] 
-
-    plot_accuracy_data(plot_list, (3,2))
-
-end
 
 getexponent(number::AbstractFloat) = Int( floor( log10( number ) ) )
 

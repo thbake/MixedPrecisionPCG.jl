@@ -2,7 +2,7 @@ using MixedPrecisionPCG
 using Random, MATLAB
 
 export runpcgexperiments, geomdist_eigvalmatrix, low_precision_preconditioner,
-       cond_experiment,  upper_bound, strakos_mat, randsvd_spd, mat_prec
+       cond_experiment, upper_bound, strakos_mat, randsvd_spd, mat_prec
 
 Random.seed!(1234)
 
@@ -31,15 +31,16 @@ function runpcgexperiments(
 
     n_ls = length(v_ls)
 
-    v_ad = Vector{AccuracyData{Float64}}(undef, n_ls)
+    # Initialize vector of AccuracyDataSeries data structures.
+    v_ads = [AccuracyDataSeries{Float64}(length(precisions), v_iter[i]) for i in 1:n_ls]
 
     for i = 1:n_ls
 
-        v_ad[i] = collect_data(scheme, precisions, v_ls[i], v_prec[i], v_iter[i])
+        collect_data!(v_ads[i], scheme, precisions, v_ls[i], v_prec[i], v_iter[i])
 
     end
 
-    return v_ad
+    return v_ads
 end
 
 
@@ -174,14 +175,24 @@ function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
 
 end
 
-_largest_iter(ac::AccuracyData, tol) = (collect(1:ac.iter_number)[ac.trueresnorm[1] .<= tol])[1]
+"""
+Return smallest iteration step k ∈ N such that the true residual norm meets the 
+desired threshold tol.
+"""
+_smallest_iter(ads::AccuracyDataSeries, tol) = (collect(1:ads[1].iter_number)[ads[1].trueresnorm .<= tol])[1]
 
-function upper_bound(ac::AccuracyData, kappaM::AbstractFloat, n::Int, tol = 1e-15)
+function upper_bound(
+    ads   ::AccuracyDataSeries,
+    kappaM::AbstractFloat,
+    kappaA::AbstractFloat,
+    n     ::Int,
+    tol = 1e-15)
 
     u = 0.5 * eps(Float64)
 
-    k = _largest_iter(ac, tol)
+    k = _smallest_iter(ads, tol)
 
-    return n * k^2 * u * sqrt(kappaM)
+    return n * k^2 * u * sqrt(kappaM) * sqrt(kappaA)
+    #return n * u * sqrt(kappaM) * sqrt(kappaA)
 
 end

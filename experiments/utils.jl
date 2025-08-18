@@ -42,17 +42,17 @@ function NumericalExperiments.getprecisions(scheme::Type{<:AbstractSplit}, preci
     return precisions[1], precisions[2]
 end
 
-function collect_data(
+function collect_data!(
+    ads            ::AccuracyDataSeries,
     scheme         ::Type{<:PreconditioningScheme},
     precisions     ::AbstractVector,
     ls             ::LinearSystem,
     preconditioner ::AbstractMatrix,
     max_iter::Int)
 
-    ad = AccuracyData{Float64}(length(precisions), max_iter)
-
     n  = size(ls.A, 1)
 
+    # Iterate over different precision choices.
     for i in eachindex(precisions)
 
         # Extract precisions
@@ -72,11 +72,9 @@ function collect_data(
         println("Solved system " * string(i))
 
         # Compute accuracy data (norms of true/updated residuals, errors, etc.)
-        compute_accuracy_data!(scheme, ad, cd, ls, preconditioner, i)
+        compute_accuracy_data!(scheme, ads[i], cd, ls, preconditioner)
 
     end
-
-    return ad
 
 end
 

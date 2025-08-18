@@ -1,7 +1,7 @@
 using LinearAlgebra
 
-export AccuracyData
-export compute_accuracy_data!
+export AccuracyData, AccuracyDataSeries
+export compute_accuracy_data!, get_iternumber
 
 """
     AccuracyData{T}(iter_number, trueresnorm, updatedresnorm, errornorm,
@@ -23,54 +23,76 @@ export compute_accuracy_data!
 mutable struct AccuracyData{T}
 
     iter_number   ::Int
-    trueresnorm   ::Vector{Vector{T}}
-    updatedresnorm::Vector{Vector{T}}
-    errornorm     ::Vector{Vector{T}}
-    resgapnorm    ::Vector{Vector{T}}
-    max_ratios    ::Dict{Int, Tuple{Float64, Int}}
+    trueresnorm   ::Vector{T}
+    updatedresnorm::Vector{T}
+    errornorm     ::Vector{T}
+    resgapnorm    ::Vector{T}
+    #max_ratios    ::Dict{Int, Tuple{Float64, Int}}
 
-    function AccuracyData{T}(n_precisions::Int, iter_number::Int) where {T}
+    function AccuracyData{T}(iter_number::Int) where {T}
 
-        trueresnorm    = [zeros(iter_number) for _ in 1:n_precisions]
-        updatedresnorm = [zeros(iter_number) for _ in 1:n_precisions]
-        errornorm      = [zeros(iter_number) for _ in 1:n_precisions]
-        resgapnorm     = [zeros(iter_number) for _ in 1:n_precisions]
-        max_ratios     = Dict(i => (0.0, 0)  for i in 1:n_precisions)
+        trueresnorm    = zeros(iter_number) 
+        updatedresnorm = zeros(iter_number) 
+        errornorm      = zeros(iter_number) 
+        resgapnorm     = zeros(iter_number) 
+        #max_ratios     = Dict(i => (0.0, 0)  for i in 1:n_precisions)
 
-        new(iter_number, trueresnorm, updatedresnorm, errornorm, resgapnorm, max_ratios)
-
+        #new(iter_number, trueresnorm, updatedresnorm, errornorm, resgapnorm, max_ratios)
+        new(iter_number, trueresnorm, updatedresnorm, errornorm, resgapnorm)
 
     end
 
 end
+
+mutable struct AccuracyDataSeries{T}
+
+    series::Vector{AccuracyData{T}}
+
+    function AccuracyDataSeries{T}(collection_size::Integer, iter_number::Integer) where T
+
+        series = [AccuracyData{T}(iter_number) for _ in 1:collection_size]
+
+        new(series)
+
+    end
+
+end
+
+get_iternumber(ads::AccuracyDataSeries) = ads.series[1].iter_number
+
+Base.length(ads::AccuracyDataSeries)               = length(ads.series)
+
+Base.getindex(ads::AccuracyDataSeries, i::Integer) = ads.series[i]
+
+Base.eachindex(ads::AccuracyDataSeries)            = eachindex(ads.series)
+
 
 function compute_accuracy_data!(
     scheme::Type{<:PreconditioningScheme},
     ad            ::AccuracyData{T},
     cd            ::ConvergenceData{T},
     ls            ::LinearSystem{T},
-    preconditioner::AbstractMatrix,
-    idx::Int) where T
+    preconditioner::AbstractMatrix) where T
 
-    ad.trueresnorm[idx]    =    true_residual_norm(cd, ls)
+    ad.trueresnorm    =    true_residual_norm(cd, ls)
 
     println("Computed true residual")
 
-    ad.updatedresnorm[idx] = updated_residual_norm(cd, ls)
+    ad.updatedresnorm = updated_residual_norm(cd, ls)
 
     println("Computed updated residual")
 
-    ad.errornorm[idx]      =           error_Anorm(cd, ls)
+    ad.errornorm      =           error_Anorm(cd, ls)
 
     println("Computed A-norm of the error")
 
-    ad.resgapnorm[idx]     =       residualgapnorm(cd, ls, scheme, preconditioner)
+    ad.resgapnorm     = residualgapnorm(cd, ls, scheme, preconditioner)
 
     println("Computed norm of the residual gap")
 
-    ad.max_ratios[idx]     =   max_iterate_ratio(cd, ls.x)
+    #ad.max_ratios     =   max_iterate_ratio(cd, ls.x)
 
-    println("Computed maximum ratios")
+    #println("Computed maximum ratios")
     
 end
 
@@ -80,7 +102,7 @@ function Base.show(io::IO, ad::AccuracyData{T}) where T<:AbstractFloat
     println(io, " - Relative true residual norm:    ", typeof(ad.trueresnorm))
     println(io, " - Relative updated residual norm: ", typeof(ad.updatedresnorm))
     println(io, " - Relative in the A-norm:         ", typeof(ad.errornorm))
-    println(io, " - Maximum iterate ratios:         ", typeof(ad.max_ratios))
+    #println(io, " - Maximum iterate ratios:         ", typeof(ad.max_ratios))
 
     println(io, "\nComputations ran for ",  ad.iter_number, " iterations.")
     println(io, "Achieved relative residual norm: ", ad.trueresnorm[end]

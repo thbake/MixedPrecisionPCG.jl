@@ -1,7 +1,7 @@
 module NumericalExperiments
 
     using MixedPrecisionPCG
-    using LinearAlgebra, SparseArrays
+    using LinearAlgebra, SparseArrays, Revise
 
     include("scaling.jl")
 
