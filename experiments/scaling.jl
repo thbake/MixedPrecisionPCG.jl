@@ -56,5 +56,11 @@ function two_sided_diagonal_scaling(A, theta::AbstractFloat, tol::AbstractFloat)
 
     return Float16.(mu .* RAS)
 
-
 end
+
+
+_determine_half(uL::Type{<:AbstractFloat}, uR::Type{<:AbstractFloat}) = any((uL, uR) .== Float16) ? Float16 : uL
+
+_squeeze_into_half(A::AbstractMatrix, ::Type{Float16})         = two_sided_diagonal_scaling(A, 1.0, 0.4)
+_squeeze_into_half(A::AbstractMatrix, ::Type{<:AbstractFloat}) = A
+

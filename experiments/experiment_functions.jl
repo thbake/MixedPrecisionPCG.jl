@@ -154,7 +154,7 @@ function randsvd_spd(n, mode, cutoff, α = 0.0)
 
 end
 
-strakos_mat(n, l1, ln, rho) = diagm(vcat([l1], [l1 + (i - 1)/(n - 1) * (ln - l1) * rho^(n - i) for i in 2:n-1], [ln]))
+strakos_mat(n, λ1, λn, ρ) = diagm(vcat([λ1], [λ1 + (i - 1)/(n - 1) * (λn - λ1) * ρ^(n - i) for i in 2:n-1], [λn]))
 
 function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
 

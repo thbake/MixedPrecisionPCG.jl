@@ -1,4 +1,4 @@
-using Plots, LaTeXStrings, MixedPrecisionPCG
+using Plots, LaTeXStrings, MixedPrecisionPCG, BFloat16s
 
 export plot_accuracy_data, generate_plots, splitprec_comparison, get_ylabel,
        plot_eigenvalues, TrueResNorm, UpdatedResNorm, ErrorNorm
@@ -135,9 +135,10 @@ get_ylabel(::Type{ErrorNorm})      = L"$\frac{||x - \hat{x}_k||_A}{||A||^{1/2} |
     # Generate labels
     label_dict = Dict(
 
-        Float64 => "d",
-        Float32 => "s",
-        Float16 => "h"
+        Float64  => "d",
+        Float32  => "s",
+        Float16  => "h",
+        BFloat16 => "b16"
     )
 
     # Extract y from the args
@@ -167,13 +168,17 @@ end
 function compplot(
     ads_pair   ::Tuple{AccuracyDataSeries, AccuracyDataSeries},
     prec_pair  ::Tuple{AbstractVector, AbstractVector}, 
-    scheme_pair::Tuple{T, T}) where T <: Type
+    scheme_pair::Tuple{T, T},
+    bound_pair ::Tuple{Float64, Float64}) where T <: Type
 
     layout = (3,2)
 
     p = Vector{Plots.Plot{Plots.GRBackend}}(undef, 6)
     
     i = 0
+
+    get_upperbound(::Type{<:AbstractWrapper}) = bound_pair[1]
+    get_upperbound(::Type{ErrorNorm})         = bound_pair[2]
 
     for (ads, prec, scheme) in zip(ads_pair, prec_pair, scheme_pair)
 
@@ -191,7 +196,7 @@ function compplot(
                 scheme       = scheme,
                 legend_param = !bool_legend,
                 ylabel_param = !bool_ylabel,
-                upperbound   = 1e-10)
+                upperbound   = get_upperbound(wrapper))
 
         end
 

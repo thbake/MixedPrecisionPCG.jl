@@ -66,6 +66,8 @@ Base.getindex(ads::AccuracyDataSeries, i::Integer) = ads.series[i]
 
 Base.eachindex(ads::AccuracyDataSeries)            = eachindex(ads.series)
 
+printlnindent(s::AbstractString) = println("  " * s)
+
 
 function compute_accuracy_data!(
     scheme::Type{<:PreconditioningScheme},
@@ -76,19 +78,19 @@ function compute_accuracy_data!(
 
     ad.trueresnorm    =    true_residual_norm(cd, ls)
 
-    println("Computed true residual")
+    printlnindent("Computed true residual")
 
     ad.updatedresnorm = updated_residual_norm(cd, ls)
 
-    println("Computed updated residual")
+    printlnindent("Computed updated residual")
 
     ad.errornorm      =           error_Anorm(cd, ls)
 
-    println("Computed A-norm of the error")
+    printlnindent("Computed A-norm of the error")
 
     ad.resgapnorm     = residualgapnorm(cd, ls, scheme, preconditioner)
 
-    println("Computed norm of the residual gap")
+    printlnindent("Computed norm of the residual gap\n")
 
     #ad.max_ratios     =   max_iterate_ratio(cd, ls.x)
 

@@ -1,6 +1,6 @@
 using Base: upperbound
 using MixedPrecisionPCG
-using LinearAlgebra, MATLAB, Random
+using LinearAlgebra, MATLAB, Random, BFloat16s
 
 Random.seed!(1234)
 
@@ -92,7 +92,7 @@ ls5 = LinearSystem(A5, b4, x5, x0_4)
 
 
 n6        = 85
-A6, L6    = mat_prec(n6, 1.0, 1e+5, 0.6, 65)
+A6, L6    = mat_prec(n6, 1.0, 1e+5, 0.6, 75)
 M6        = Symmetric(L6 * L6')
 b6        = inv(sqrt(n6)) .* ones(n6)
 x6        = A6\b6
@@ -108,38 +108,29 @@ ls6 = LinearSystem(A6, b6, x6, zeros(n6))
 
 
 # Set precisions
-d = Float64
-s = Float32
-h = Float16
+d     = Float64
+s     = Float32
+h     = Float16
+h_b16 = BFloat16
 
 # Set unit roundoff values
-ud = 0.5 * eps(d)
-us = 0.5 * eps(s)
-uh = 0.5 * eps(h)
+ud   = 0.5 * eps(d)
+us   = 0.5 * eps(s)
+uh   = 0.5 * eps(h)
+ub16 = 0.5 * eps(h_b16)
 
-splitpcg_precisions = [(d, d), (d, s), (s, d), (s, s), (d, h)]
-leftpcg_precisions  = [d, s, h]
+splitpcg_precisions = [(d, d), (d, s), (s, d), (s, s), (d, h), (d, h_b16)]
+leftpcg_precisions  = [d, s, h, h_b16]
 
-#v_ls       = [      ls1,       ls2,        ls4,       ls5]
-#v_prec     = [       L1,        L2,         L4,        L5]
-#iterations = [max_iter1, max_iter2,  max_iter4, max_iter4]
+v_ls       = [      ls6]
+v_prec     = [       L6]
+iterations = [max_iter6]
 
-#v_ls       = [      ls1,       ls2,        ls4,       ls5]
-#v_prec     = [       L1,        L2,         L4,        L5]
-#iterations = [max_iter1, max_iter2,  max_iter4, max_iter4]
-
-v_ls       = [      ls1,        ls4,       ls6]
-v_prec     = [       L1,         L4,        L6]
-iterations = [max_iter1,  max_iter4, max_iter6]
-
-#v_ls       = [      ls4,       ls5]
-#v_prec     = [       L4,        L5]
-#iterations = [max_iter4, max_iter4]
 
 v_ads_left      = runpcgexperiments(Left,      v_ls, v_prec, iterations, leftpcg_precisions);
 v_ads_split     = runpcgexperiments(Split,     v_ls, v_prec, iterations, splitpcg_precisions);
 v_ads_saadsplit = runpcgexperiments(SaadSplit, v_ls, v_prec, iterations, splitpcg_precisions);
 
 # Compute upper bounds
-ub_residual = upper_bound(v_ads_left[3], kappaM6, 1.0,     n6)
-ub_error    = upper_bound(v_ads_left[3], kappaM6, kappaA6, n6)
+ub_residual = upper_bound(v_ads_left[1], kappaM6, 1.0,     n6)
+ub_error    = upper_bound(v_ads_left[1], kappaM6, kappaA6, n6)

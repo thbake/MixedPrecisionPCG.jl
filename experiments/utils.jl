@@ -3,7 +3,6 @@ export generate_preconditioners, getprecisions, collect_data
 
 const FactPrec{uL, uR, S} = FactorizationPreconditioner{uL, uR, S}
 
-
 """
 Generate preconditioner data structures based on preconditioning scheme, a 
 vector of precisions, and the actual preconditioners.
@@ -15,7 +14,6 @@ function generate_preconditioners(
     precisions::Vararg{Type{<:AbstractFloat}, N}) where N
 
     preconditioners = [ FactorizationPreconditioner{u, scheme}(Pl, Pr) for u in precisions]
-    
 
     return preconditioners
 end
@@ -26,21 +24,21 @@ function generate_preconditioners(
     precisions::Vararg{Tuple{Type, Type}, N}) where {N}
 
     preconditioners = [ FactPrec{uL, uR, Split}(Pl, Pr) for (uL, uR) in precisions]
-    
 
     return preconditioners
 end
 
-function getprecisions(scheme::Type{Left}, precisions::Type{<:AbstractFloat})
+function getprecisions(::Type{Left}, precisions::Type{<:AbstractFloat})
 
     return precisions, precisions
 
 end
 
-function NumericalExperiments.getprecisions(scheme::Type{<:AbstractSplit}, precisions::Tuple{Type, Type})
+function NumericalExperiments.getprecisions(::Type{<:AbstractSplit}, precisions::Tuple{Type, Type})
 
     return precisions[1], precisions[2]
 end
+
 
 function collect_data!(
     ads            ::AccuracyDataSeries,
@@ -52,24 +50,30 @@ function collect_data!(
 
     n  = size(ls.A, 1)
 
+    println("Preconditioning scheme: " * string(scheme))
+
     # Iterate over different precision choices.
     for i in eachindex(precisions)
 
         # Extract precisions
         uL, uR = getprecisions(scheme, precisions[i])
 
+        u  = _determine_half(uL, uR)
+        #A  = _squeeze_into_half(ls.A, u)
+        #ML = _squeeze_into_half(preconditioner, uL)
+        #MR = _squeeze_into_half(preconditioner, uR)'
+        ML, MR = preconditioner, preconditioner'
+
         # Generate preconditioner data structure with corresponding precisions.
-        M = FactorizationPreconditioner{uL, uR, scheme}(preconditioner, preconditioner')
+        M = FactorizationPreconditioner{uL, uR, scheme}(ML, MR)
 
         # Initialize convergence data structure.
         cd = ConvergenceData{Float64}(n, max_iter)
 
-        println(scheme)
-
         # Run PCG on linear system.
         pcg!(cd, ls.A, M, ls.b, ls.x0, max_iter)
 
-        println("Solved system " * string(i))
+        println("  Solved system " * string(i))
 
         # Compute accuracy data (norms of true/updated residuals, errors, etc.)
         compute_accuracy_data!(scheme, ads[i], cd, ls, preconditioner)
