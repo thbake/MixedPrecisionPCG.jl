@@ -117,7 +117,13 @@ Compute updated residual norm ||rk|| / ||A|| ||x||
 
 function updated_residual_norm(cd::ConvergenceData, ls::LinearSystem)
     
-    norm_rk = [ norm( @view(cd.updated_residuals[:, k]) ) for k in 1:cd.iter_number ]
+	norm_rk = zeros(cd.iter_number)
+
+	for k in 1:cd.iter_number
+
+		tmp = norm(@view cd.updated_residuals[:, k])
+		norm_rk[k] = isnan(tmp) ? 0.0 : tmp
+	end
 
     return inv(ls.normA * ls.normx) .* norm_rk
     
@@ -135,7 +141,9 @@ function true_residual_norm(cd::ConvergenceData, ls::LinearSystem)
 
     for k in 1:cd.iter_number
 
-        trueresnorm[k] = norm(ls.b - ls.A * @view xk[:, k]) 
+		tmp = norm(ls.b - ls.A * @view xk[:, k]) 
+
+		trueresnorm[k] = isnan(tmp) ? 0.0 : tmp
 
     end
 
@@ -155,8 +163,9 @@ function error_Anorm(cd::ConvergenceData, ls::LinearSystem)
 
     for k in 1:cd.iter_number
 
-        errornorm[k] = A_norm(ls.A, ls.x - @view xk[:, k])
+		tmp = A_norm(ls.A, ls.x - @view xk[:, k])
 
+		errornorm[k] = isnan(tmp) ? 0.0 : tmp
     end
 
     return inv(denominator) .* errornorm 
@@ -206,7 +215,9 @@ function residualgapnorm(
 
     for k in 1:cd.iter_number
 
-        resgapnorm[k] = norm(ls.b - ls.A * @view(xk[:, k]) -  @view(rk[:, k]))
+		tmp = norm(ls.b - ls.A * @view(xk[:, k]) -  @view(rk[:, k]))
+
+		resgapnorm[k] = isnan(tmp) ? 0.0 : tmp
 
     end
 

@@ -1,48 +1,18 @@
 using MixedPrecisionPCG
 using Random
 
-export runpcgexperiments, geomdist_eigvalmatrix, low_precision_preconditioner,
-       cond_experiment, upper_bound, strakos_mat, randsvd_spd, mat_prec
+export geomdist_eigvalmatrix, low_precision_preconditioner, cond_experiment, upper_bound, 
+	   runpcgexperiments, strakos_mat, randsvd_spd, mat_prec
+
+export Experiment, ErrorBound, ResidualBound
 
 Random.seed!(1234)
 
-"""
-    runpcgexperiments(scheme, v_ls, v_prec, v_iter, precisions)
+abstract type AbstractBound end
 
-Run pcg! on a varierty of linear algebraic systems (given in the vector v_ls) 
-and compute the corresponding collection of AccuracyData (stored in the vector 
-v_ad). 
+struct ErrorBound    <: AbstractBound end
+struct ResidualBound <: AbstractBound end
 
-...
-# Arguments
-- `scheme    ::Type{  <:PreconditioningScheme}`: type of preconditioning scheme (left/split).
-- `v_ls      ::Vector{        LinearSystem{T}}`: vector of linear algebraic systems.
-- `v_prec    ::Vector{       <:AbstractMatrix}`: vector of preconditioners (Cholesky factors).
-- `v_iter    ::Vector{                    Int}`: vector of maximum number of iterations.
-- `precisions::AbstractVector`: vector containing data types corresponding to different precisions.
-...
-"""
-function runpcgexperiments(
-    scheme    ::Type{  <:PreconditioningScheme},
-    v_ls      ::Vector{        LinearSystem{T}},
-    v_prec    ::Vector{       <:AbstractMatrix},
-    v_iter    ::Vector{                    Int},
-    precisions::AbstractVector) where T <: AbstractFloat
-
-    n_ls = length(v_ls)
-	println(n_ls)
-
-    # Initialize vector of AccuracyDataSeries data structures.
-    v_ads = [AccuracyDataSeries{Float64}(length(precisions), v_iter[i]) for i in 1:n_ls]
-
-    for i = 1:n_ls
-
-        collect_data!(v_ads[i], scheme, precisions, v_ls[i], v_prec[i], v_iter[i])
-
-    end
-
-    return v_ads
-end
 
 
 """
@@ -154,24 +124,57 @@ function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
 
 end
 
-"""
-Return smallest iteration step k ∈ N such that the true residual norm meets the 
-desired threshold tol.
-"""
-_smallest_iter(ads::AccuracyDataSeries, tol) = (collect(1:ads[1].iter_number)[ads[1].trueresnorm .<= tol])[1]
+struct Experiment
+	ls            ::LinearSystem
+	preconditioner::AbstractMatrix
+	max_iter      ::Integer
+	precisions    ::AbstractVector
+
+	function Experiment(
+			n         ::Integer,
+			lambda_min::AbstractFloat,
+			lambda_max::AbstractFloat,
+			rho       ::AbstractFloat,
+			i         ::Integer,
+			max_iter  ::Integer,
+			precisions::AbstractVector)
+
+		A, L = mat_prec(n, lambda_min, lambda_max, rho, i) # Generate matrix and preconditioner.
+		b    = inv(sqrt(n)) .* ones(n)                     # Generate right-hand side.
+		x    = A \ b                                       # Solve system directly for reference.
+		ls   = LinearSystem(A, b, x, zeros(n))             # Construct linear system.
+
+		new(ls, L, max_iter, precisions)
+	end
+end
+
+function runpcgexperiments(experiment::Experiment, scheme::Type{<:PreconditioningScheme})
+
+    # Initialize AccuracyDataSeries data structure.
+    ads = AccuracyDataSeries{Float64}(length(experiment.precisions), experiment.max_iter) 
+
+	collect_data!(
+	  ads,
+	  scheme,
+	  experiment.precisions,
+	  experiment.ls,
+	  experiment.preconditioner,
+	  experiment.max_iter
+	)
+    return ads
+end
 
 function upper_bound(
-    ads   ::AccuracyDataSeries,
-    kappaM::AbstractFloat,
-    kappaA::AbstractFloat,
-    n     ::Int,
-    tol = 1e-15)
+	experiment::Experiment,
+	bound_type::Type{<:AbstractBound})
 
     u = 0.5 * eps(Float64)
 
-    k = _smallest_iter(ads, tol)
+	M = Symmetric(experiment.preconditioner * experiment.preconditioner')
+	A = experiment.ls.A
+	kappaM = cond(M)
+	kappaA = bound_type == ErrorBound ? cond(A) : 1.0
 
-    return n * k^2 * u * sqrt(kappaM) * sqrt(kappaA)
-    #return n * u * sqrt(kappaM) * sqrt(kappaA)
+    return u * sqrt(kappaM) * sqrt(kappaA)
 
 end

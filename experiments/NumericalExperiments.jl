@@ -11,7 +11,4 @@ module NumericalExperiments
 
     include("plot_general.jl")
 
-    include("factorization_preconditioner.jl")
-
-
 end
