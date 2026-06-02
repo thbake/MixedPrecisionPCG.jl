@@ -1,5 +1,3 @@
-using MATLAB
-
 # Exported structs
 export AbstractPreconditioner, AbstractSplit, FactorizationPreconditioner, 
        PreconditioningScheme, Left, Split, Right, SaadSplit
@@ -46,6 +44,10 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
     Pl::Matrix{uL} # Left factor.
     Pr::Matrix{uR} # Right factor.
 
+	"""
+	Constructor given left and right preconditioners, and preconditioning scheme.
+	Precisions are deduced from type of each preconditioner.
+	"""
     function FactorizationPreconditioner(
         Pl    ::AbstractMatrix{uL}, 
         Pr    ::AbstractMatrix{uR},
@@ -55,6 +57,10 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
 
     end
 
+	"""
+	Constructor given left and right preconditioners, and preconditioning scheme.
+	Precisions are given explicitly.
+	"""
     function FactorizationPreconditioner{uL, uR, scheme}(
         Pl    ::AbstractMatrix, 
         Pr    ::AbstractMatrix) where {uL <: AbstractFloat, uR <: AbstractFloat, scheme }
@@ -64,7 +70,8 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
     end
 
     """
-    Constructor for one sided factorization-based preconditioner.
+    Constructor for one sided factorization-based preconditioner, i.e., full-left or full-right
+	preconditioner.
     """
     function FactorizationPreconditioner{uS, PreconditioningScheme}(
         Pl::AbstractMatrix,
@@ -89,6 +96,8 @@ function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Left}
 end
 
 
+# Preconditioning methods for Saad's split PCG algorithm.
+# =======================================================
 precondition(
     M::FactorizationPreconditioner{uL, uR, SaadSplit},
     r::AbstractVector{u}) where {u, uL, uR} = M.Pr \ uR.(M.Pl \ uL.(r))
@@ -117,6 +126,7 @@ function precondition(
     return inv(M.Pl) * A * inv(M.Pr) 
 
 end
+# ============================================================
 
 function general_precond(
     M::FactorizationPreconditioner{uL, uR, Left},
@@ -124,9 +134,8 @@ function general_precond(
 
     s = u.(M.Pr \ (M.Pl \ uL.(r)))
     q = s
-    z = r
 
-    return s, q, z
+    return s,q
 end
 
 function general_precond(
@@ -134,10 +143,9 @@ function general_precond(
     r::AbstractVector{u}) where {u, uL, uR}
 
     s = r
-    q = u.(M.Pr \ M.Pl \ uR.(r))
-    z = q
+    q = u.(M.Pr \ M.Pl \ uR.(s))
 
-    return s, q, z
+    return s, q
 end
 
 function general_precond(
@@ -146,8 +154,7 @@ function general_precond(
 
     s = u.(M.Pl \ uL.(r))
     q = u.(M.Pr \ uR.(s))
-    z = s
 
-    return s, q, z
+    return s, q
 
 end

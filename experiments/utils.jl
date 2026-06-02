@@ -1,32 +1,7 @@
 export FactPrec
-export generate_preconditioners, getprecisions, collect_data
+export getprecisions, collect_data!
 
 const FactPrec{uL, uR, S} = FactorizationPreconditioner{uL, uR, S}
-
-"""
-Generate preconditioner data structures based on preconditioning scheme, a 
-vector of precisions, and the actual preconditioners.
-"""
-function generate_preconditioners(
-    scheme    ::Type{<:PreconditioningScheme},
-    Pl        ::AbstractMatrix,
-    Pr        ::AbstractMatrix,
-    precisions::Vararg{Type{<:AbstractFloat}, N}) where N
-
-    preconditioners = [ FactorizationPreconditioner{u, scheme}(Pl, Pr) for u in precisions]
-
-    return preconditioners
-end
-
-function generate_preconditioners(
-    Pl        ::AbstractMatrix,
-    Pr        ::AbstractMatrix,
-    precisions::Vararg{Tuple{Type, Type}, N}) where {N}
-
-    preconditioners = [ FactPrec{uL, uR, Split}(Pl, Pr) for (uL, uR) in precisions]
-
-    return preconditioners
-end
 
 function getprecisions(::Type{Left}, precisions::Type{<:AbstractFloat})
 
@@ -58,10 +33,6 @@ function collect_data!(
         # Extract precisions
         uL, uR = getprecisions(scheme, precisions[i])
 
-        u  = _determine_half(uL, uR)
-        #A  = _squeeze_into_half(ls.A, u)
-        #ML = _squeeze_into_half(preconditioner, uL)
-        #MR = _squeeze_into_half(preconditioner, uR)'
         ML, MR = preconditioner, preconditioner'
 
         # Generate preconditioner data structure with corresponding precisions.

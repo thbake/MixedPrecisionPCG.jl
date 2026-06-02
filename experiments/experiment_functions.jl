@@ -1,5 +1,5 @@
 using MixedPrecisionPCG
-using Random, MATLAB
+using Random
 
 export runpcgexperiments, geomdist_eigvalmatrix, low_precision_preconditioner,
        cond_experiment, upper_bound, strakos_mat, randsvd_spd, mat_prec
@@ -30,6 +30,7 @@ function runpcgexperiments(
     precisions::AbstractVector) where T <: AbstractFloat
 
     n_ls = length(v_ls)
+	println(n_ls)
 
     # Initialize vector of AccuracyDataSeries data structures.
     v_ads = [AccuracyDataSeries{Float64}(length(precisions), v_iter[i]) for i in 1:n_ls]
@@ -130,28 +131,6 @@ function cond_experiment(
     end
 
     return ad_vector, kappa_range_prec
-end
-
-function randsvd_spd(n, mode, cutoff, α = 0.0)
-
-    A = mat"gallery('randsvd', [$n,$n], 1e8, $mode);"
-    sva = svd(A).S;
-    V   = qr(rand(n,n)).Q;
-    A  = V * diagm(sva) * V';
-    A  = 0.5 * (A + A');
-
-    prec_eigvals = vcat(sva[1:cutoff], [sva[cutoff] for _ in 1:n-cutoff])
-
-    M = V * diagm(prec_eigvals) * V'
-    M = 0.5 * (M + M') 
-
-    M[n,n] += α
-
-    #L = low_precision_preconditioner(M, tol = 1e-4) 
-    L = cholesky(M).L
-
-    return A, L
-
 end
 
 strakos_mat(n, λ1, λn, ρ) = diagm(vcat([λ1], [λ1 + (i - 1)/(n - 1) * (λn - λ1) * ρ^(n - i) for i in 2:n-1], [λn]))

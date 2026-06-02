@@ -82,16 +82,18 @@ function pcg!(
     x = x0
     r = b - (A * uA.(x0))
 
-
-    s, q, z = general_precond(M, r)
+    s,q = general_precond(M, r)
 
     p = q
 
     for k in 1:max_iter
 
         Ap = A * uA.(p)
-        zs = dot(z, s)
-        α  = zs * inv(dot(Ap, p))
+
+        rq = dot(r, q)
+
+        α  = rq * inv(dot(Ap, p))
+
         x  = x + α .* p
 
         convergence_data.iterates[:, k] = x
@@ -100,9 +102,10 @@ function pcg!(
 
         convergence_data.updated_residuals[:, k] = r
 
-        s, q, z = general_precond(M, r)
+        s, q = general_precond(M, r)
 
-        β = dot(z,s) * inv(zs)
+        β = dot(r,q) * inv(rq)
+
         p = q + β .* p
 
     end
