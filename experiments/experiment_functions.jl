@@ -1,17 +1,17 @@
 using MixedPrecisionPCG
-using Random
+using Random, JSON3, BFloat16s
 
 export geomdist_eigvalmatrix, low_precision_preconditioner, cond_experiment, upper_bound, 
-	   runpcgexperiments, strakos_mat, randsvd_spd, mat_prec
+	   runpcgexperiments, strakos_mat, randsvd_spd, mat_prec, write_to_file
 
-export Experiment, ErrorBound, ResidualBound
+export Experiment, Error, Residual, AbstractMetric
 
 Random.seed!(1234)
 
-abstract type AbstractBound end
+abstract type AbstractMetric end
 
-struct ErrorBound    <: AbstractBound end
-struct ResidualBound <: AbstractBound end
+struct Error    <: AbstractMetric end
+struct Residual <: AbstractMetric end
 
 
 
@@ -116,9 +116,8 @@ function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
 
    M = diagm(prec_eigvals)
 
-   L = cholesky(M).L
-
-   #println(cond((L \ M) / L'))
+   # Take square root of M to compute Cholesky factors since M is diagonal.
+   L = sqrt(M)
 
    return A, L
 
@@ -166,15 +165,74 @@ end
 
 function upper_bound(
 	experiment::Experiment,
-	bound_type::Type{<:AbstractBound})
+	bound_type::Type{<:AbstractMetric})
 
     u = 0.5 * eps(Float64)
 
 	M = Symmetric(experiment.preconditioner * experiment.preconditioner')
 	A = experiment.ls.A
 	kappaM = cond(M)
-	kappaA = bound_type == ErrorBound ? cond(A) : 1.0
+	kappaA = bound_type == Error ? cond(A) : 1.0
 
     return u * sqrt(kappaM) * sqrt(kappaA)
+
+end
+
+
+# Export data
+process_label(precision::DataType, label_dict::Dict, ::Type{Left}) = label_dict[precision]
+
+process_label(
+  precisions::Tuple{T1, T2},
+  label_dict::Dict,
+  ::Type{<:AbstractSplit}
+ ) where {T1 <: DataType, T2 <: DataType} = "(" * 
+											label_dict[precisions[1]] *
+											", " * 
+											label_dict[precisions[2]] *
+											")"
+
+get_metric_symbol(::Type{Error})    = :errornorm
+get_metric_symbol(::Type{Residual}) = :trueresnorm
+
+function write_to_file(
+		filename     ::String,
+		ads          ::AccuracyDataSeries,
+		bound        ::AbstractFloat,
+		experiment   ::Experiment,
+		scheme       ::Type{<:PreconditioningScheme},
+		metric       ::Type{<:AbstractMetric})
+
+	label_dict =  Dict(
+
+        Float64  => "fp64",
+        Float32  => "fp32",
+        Float16  => "fp16",
+        BFloat16 => "b16"
+    )
+
+	processed_labels = [process_label(k, label_dict, scheme) for k in experiment.precisions]
+
+	value_array   = zeros(experiment.max_iter)
+	metric_data   = Dict( label => copy(value_array) for label in processed_labels )
+	metric_symbol = get_metric_symbol(metric)
+
+	for (i, precision_label) in enumerate(processed_labels)
+
+		println(precision_label)
+		metric_data[precision_label] = getproperty(ads[i], metric_symbol)
+
+
+	end
+
+	metric_data["bound"] = repeat([bound], experiment.max_iter)
+
+	if !isdir("json_data")
+
+		mkdir(pwd() * "/json_data")
+
+	end
+
+	JSON3.write(pwd() * "/json_data/" * filename, metric_data, allow_inf = true)
 
 end

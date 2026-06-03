@@ -27,7 +27,6 @@ mutable struct AccuracyData{T}
     updatedresnorm::Vector{T}
     errornorm     ::Vector{T}
     resgapnorm    ::Vector{T}
-    #max_ratios    ::Dict{Int, Tuple{Float64, Int}}
 
     function AccuracyData{T}(iter_number::Int) where {T}
 
@@ -35,9 +34,7 @@ mutable struct AccuracyData{T}
         updatedresnorm = zeros(iter_number) 
         errornorm      = zeros(iter_number) 
         resgapnorm     = zeros(iter_number) 
-        #max_ratios     = Dict(i => (0.0, 0)  for i in 1:n_precisions)
 
-        #new(iter_number, trueresnorm, updatedresnorm, errornorm, resgapnorm, max_ratios)
         new(iter_number, trueresnorm, updatedresnorm, errornorm, resgapnorm)
 
     end
@@ -92,10 +89,6 @@ function compute_accuracy_data!(
 
     printlnindent("Computed norm of the residual gap\n")
 
-    #ad.max_ratios     =   max_iterate_ratio(cd, ls.x)
-
-    #println("Computed maximum ratios")
-    
 end
 
 function Base.show(io::IO, ad::AccuracyData{T}) where T<:AbstractFloat
@@ -104,7 +97,6 @@ function Base.show(io::IO, ad::AccuracyData{T}) where T<:AbstractFloat
     println(io, " - Relative true residual norm:    ", typeof(ad.trueresnorm))
     println(io, " - Relative updated residual norm: ", typeof(ad.updatedresnorm))
     println(io, " - Relative in the A-norm:         ", typeof(ad.errornorm))
-    #println(io, " - Maximum iterate ratios:         ", typeof(ad.max_ratios))
 
     println(io, "\nComputations ran for ",  ad.iter_number, " iterations.")
     println(io, "Achieved relative residual norm: ", ad.trueresnorm[end]
@@ -122,6 +114,7 @@ function updated_residual_norm(cd::ConvergenceData, ls::LinearSystem)
 	for k in 1:cd.iter_number
 
 		tmp = norm(@view cd.updated_residuals[:, k])
+
 		norm_rk[k] = isnan(tmp) ? 0.0 : tmp
 	end
 
