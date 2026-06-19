@@ -1,9 +1,9 @@
 # Exported structs
 export AbstractPreconditioner, AbstractSplit, FactorizationPreconditioner, 
-       PreconditioningScheme, Left, Split, Right, SaadSplit
+        Left, PreconditioningScheme, Right, SaadSplit, Split
 
 # Exported functions
-export precondition, precondition!, getprecisions
+export general_precond, getprecisions, precondition, precondition!
 
 """
 Construction and application of preconditioner.
@@ -24,6 +24,23 @@ Abstract type representing a general notion of a preconditioner.
 """
 abstract type AbstractPreconditioner{uL, uR, scheme} end
 
+function scale_preconditioner(M::AbstractMatrix, precision::DataType)      
+
+  n = size(M, 1)
+
+  return precision.(M), I(n), I(n)
+
+end
+
+function scale_preconditioner(M::AbstractMatrix, precision::Type{Float16}) 
+
+  M, R, S = two_sided_diagonal_scaling(M, 0.8, 1e-4)
+
+  return M, R, S
+
+end
+
+
 """
 Preconditioner resulting from an (incomplete) factorization of the system 
 matrix A, where A = Pl ⋅ Pr, where Pl and Pr denote the left and right factors
@@ -43,6 +60,8 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
 
     Pl::Matrix{uL} # Left factor.
     Pr::Matrix{uR} # Right factor.
+    R ::AbstractMatrix
+    S ::AbstractMatrix
 
 	"""
 	Constructor given left and right preconditioners, and preconditioning scheme.
@@ -53,7 +72,8 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
         Pr    ::AbstractMatrix{uR},
         scheme::Type{PreconditioningScheme}) where {uL, uR} <: AbstractFloat
 
-          new{uL, uR, scheme}(Pl, Pr) 
+        n = size(Pl, 1)
+        new{uL, uR, scheme}(Pl, Pr, I(n), I(n)) 
 
     end
 
@@ -65,7 +85,11 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
         Pl    ::AbstractMatrix, 
         Pr    ::AbstractMatrix) where {uL <: AbstractFloat, uR <: AbstractFloat, scheme }
 
-        new(uL.(Pl), uR.(Pr))
+        # Perform scaling if necessary
+        Pl, R, S = scale_preconditioner(Pl, uL)
+        Pr, R, S = scale_preconditioner(Pl, uR)
+
+        new(Pl, Pr, R, S)
 
     end
 
@@ -73,13 +97,13 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
     Constructor for one sided factorization-based preconditioner, i.e., full-left or full-right
 	preconditioner.
     """
-    function FactorizationPreconditioner{uS, PreconditioningScheme}(
-        Pl::AbstractMatrix,
-        Pr::AbstractMatrix) where {uS <: AbstractFloat, PreconditioningScheme}
+    #function FactorizationPreconditioner{uS, PreconditioningScheme}(
+    #    Pl::AbstractMatrix,
+    #    Pr::AbstractMatrix) where {uS <: AbstractFloat, PreconditioningScheme}
 
-        new{uS, uS, PreconditioningScheme}(uS.(Pl), uS.(Pr))
+    #    new{uS, uS, PreconditioningScheme}(uS.(Pl), uS.(Pr), I)
 
-    end
+    #end
 
 end
 
@@ -93,6 +117,17 @@ function getprecisions(preconditioner::FactorizationPreconditioner{uL, uR, Left}
 
     return eltype(preconditioner.Pl)
 
+end
+
+function getprecisions(::Type{Left}, precisions::Type{<:AbstractFloat})
+
+    return precisions, precisions
+
+end
+
+function getprecisions(::Type{<:AbstractSplit}, precisions::Tuple{Type, Type})
+
+    return precisions[1], precisions[2]
 end
 
 
@@ -128,11 +163,28 @@ function precondition(
 end
 # ============================================================
 
+"""
+Full-left preconditioning. Here uL = uR.
+"""
 function general_precond(
     M::FactorizationPreconditioner{uL, uR, Left},
     r::AbstractVector{u}) where {u, uL, uR}
 
     s = u.(M.Pr \ (M.Pl \ uL.(r)))
+    q = s
+
+    return s,q
+end
+
+function general_precond(
+    M::FactorizationPreconditioner{Float16, Float16, Left},
+    r::AbstractVector{u}) where {u}
+
+    println("Scaling you")
+    println(M.R)
+
+    s_half = M.Pr \ (M.Pl \ Float16.(M.R * r)) # Scale, cast and solve
+    s = u.(M.S * s_half) # Scale back and cast to working precision
     q = s
 
     return s,q

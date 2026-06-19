@@ -1,75 +1,14 @@
 using MixedPrecisionPCG
-using Random, JSON3, BFloat16s, JSON
+using BFloat16s, JSON, LinearAlgebra
 
-export geomdist_eigvalmatrix, low_precision_preconditioner, cond_experiment, upper_bound, 
-	   runpcgexperiments, strakos_mat, mat_prec, write_to_file, write_heatmap_data
+export low_precision_preconditioner, perturb_preconditioner!, runpcgexperiments, upper_bound, write_heatmap_data, write_to_file 
 
-export Experiment, Error, Residual, AbstractMetric, MinimaData, IndexData
-
-Random.seed!(1234)
+export Experiment, Error, Residual, AbstractMetric 
 
 abstract type AbstractMetric end
 
 struct Error    <: AbstractMetric end
 struct Residual <: AbstractMetric end
-
-abstract type AbstractHeatmapData end
-
-struct IndexData  <: AbstractHeatmapData end
-struct MinimaData <: AbstractHeatmapData end
-
-
-
-"""
-    geomdist_eigvalmatrix(kappa, n)
-
-Given a parameter kappa and a problem size n, computes an SPD matrix A = Q D Q^T
-with geometrically distributed eigenvalues from [1, kappa] with spectral 
-condition number kappa.
-"""
-function geomdist_eigvalmatrix(kappa, n)
-
-    # Compute random nxn matrix Y.
-    Y = rand(n, n)
-
-    # Compute QR decomposition of Y.
-    Q = qr(Y).Q
-
-    # Generate geometrically distributed eigenvalues.
-    D = diagm([ kappa^((i - 1) / (n - 1)) for i in 1:n ])
-
-    # Return SPD matrix with prescribed eigenvalues.
-    return sparse(Hermitian(Q * D * Q'))
-    
-end
-
-"""
-    low_precision_preconditioner(A; tol)
-
-Given an SPD matrix A and a user prescribed tolerance, computes a low precision
-Cholesky factorization as a preconditioner. Two diagonal scaling is employed 
-in order to avoid over- or underflow when casting given matrix to half 
-precision.
-"""
-function low_precision_preconditioner(A::AbstractMatrix; tol::AbstractFloat)
-
-    n     = size(A, 1)
-    Ah    = two_sided_diagonal_scaling(A, 1.0, tol)
-    alpha = 0.0
-
-    while !isposdef(Ah) 
-
-        alpha += 1.0
-
-        Ah = Ah + alpha .* I(n)
-        
-    end
-
-    Lh = sparse(cholesky(Ah).L)
-
-    return Lh
-
-end
 
 strakos_mat(n, λ1, λn, ρ) = diagm(vcat([λ1], [λ1 + (i - 1)/(n - 1) * (λn - λ1) * ρ^(n - i) for i in 2:n-1], [λn]))
 
@@ -91,7 +30,7 @@ function mat_prec(n::Int, l1::Float64, ln::Float64, rho::Float64, cutoff::Int)
 
 end
 
-struct Experiment{T <: PreconditioningScheme} 
+mutable struct Experiment{T <: PreconditioningScheme} 
 	ls            ::LinearSystem
 	preconditioner::AbstractMatrix
 	max_iter      ::Integer
@@ -113,26 +52,46 @@ struct Experiment{T <: PreconditioningScheme}
 
 		new(ls, L, max_iter, precisions)
 	end
+
+  function Experiment{T}(experiment::Experiment) where T <: PreconditioningScheme
+
+    new(experiment.ls, experiment.preconditioner, experiment.max_iter, experiment.precisions)
+
+  end
+
 end
+
+get_unique_precisions(experiment::Experiment{Left}) = experiment.precisions
+
+get_unique_precisions(experiment::Experiment{T}) where T <: AbstractSplit = experiment.precisions
+
+getproblemsize(experiment::Experiment) = size(experiment.ls.A, 1)
 
 get_scheme(::Experiment{T}) where T = T
 
+function perturb_preconditioner!(experiment::Experiment, perturbation::AbstractMatrix) 
+
+  experiment.preconditioner += perturbation
+
+end
+
 function runpcgexperiments(experiment::Experiment{T}) where T <: PreconditioningScheme
 
+		scheme = get_scheme(experiment)
+
     # Initialize AccuracyDataSeries data structure.
-    ads = AccuracyDataSeries{Float64}(length(experiment.precisions), experiment.max_iter) 
+		ads = AccuracyDataSeries{Float64}(experiment.precisions, scheme, experiment.max_iter) 
 
-    n  = size(experiment.ls.A, 1)
+		println("Preconditioning scheme: " * string(scheme))
 
-	println("Preconditioning scheme: " * string(get_scheme(experiment)))
-
-	scheme = get_scheme(experiment)
+		n = getproblemsize(experiment)
 
     # Iterate over different precision choices.
-    for i in eachindex(experiment.precisions)
+
+    for precision in experiment.precisions
 
         # Extract precisions
-        uL, uR = getprecisions(scheme, experiment.precisions[i])
+        uL, uR = getprecisions(scheme, precision)
 
         ML, MR = experiment.preconditioner, experiment.preconditioner'
 
@@ -145,10 +104,10 @@ function runpcgexperiments(experiment::Experiment{T}) where T <: Preconditioning
         # Run PCG on linear system.
         pcg!(cd, experiment.ls.A, M, experiment.ls.b, experiment.ls.x0, experiment.max_iter)
 
-        println("  Solved system " * string(i))
+        println("  Solved system using precisions " * string(precision))
 
         # Compute accuracy data (norms of true/updated residuals, errors, etc.)
-        compute_accuracy_data!(scheme, ads[i], cd, experiment.ls, experiment.preconditioner)
+				compute_accuracy_data!(scheme, ads[precision, scheme], cd, experiment.ls, experiment.preconditioner)
 
     end
 
@@ -171,163 +130,135 @@ function upper_bound(
 end
 
 
-# Export data
-process_label(precision::DataType, label_dict::Dict, ::Type{Left}) = label_dict[precision]
 
-process_label(
-  precisions::Tuple{T1, T2},
-  label_dict::Dict,
-  ::Type{<:AbstractSplit}
- ) where {T1 <: DataType, T2 <: DataType} = "(" * 
-											label_dict[precisions[1]] *
-											", " * 
-											label_dict[precisions[2]] *
-											")"
-
-get_metric_symbol(::Type{Error})    = :errornorm
-get_metric_symbol(::Type{Residual}) = :trueresnorm
+# Tell JSON to only serialize dictionary for the AccuracyData type.
+JSON.lower(ad::AccuracyData)        = ad.metric_dictionary
+JSON.lower(ads::AccuracyDataSeries) = ads.series
 
 function write_to_file(
 		filename  ::String,
 		ads       ::AccuracyDataSeries,
-		bound     ::AbstractFloat,
-		experiment::Experiment,
-		metric    ::Type{<:AbstractMetric})
+		experiment::Experiment
+		)
 
-	label_dict =  Dict(
+		upper_bounds = Dict(
+				"ErrorNorm"   => upper_bound(experiment, Error),
+				"TrueResNorm" => upper_bound(experiment, Residual),
+		)
 
-        Float64  => "fp64",
-        Float32  => "fp32",
-        Float16  => "fp16",
-        BFloat16 => "b16"
-    )
+		if !isdir("json_data")
 
-	processed_labels = [process_label(k, label_dict, get_scheme(experiment)) for k in experiment.precisions]
+				mkdir(pwd() * "/json_data")
 
-	value_array   = zeros(experiment.max_iter)
-	metric_data   = Dict( label => copy(value_array) for label in processed_labels )
-	metric_symbol = get_metric_symbol(metric) # :errornorm or :trueresnorm
+		end
 
-	for (i, precision_label) in enumerate(processed_labels)
+		tmp              = keys(ads.series) 
+		precision_vector = sort([key for key in tmp], rev = true)
 
-		metric_data[precision_label] = getproperty(ads[i], metric_symbol)
-
-	end
-
-	metric_data["bound"] = repeat([bound], experiment.max_iter)
-
-	if !isdir("json_data")
-
-		mkdir(pwd() * "/json_data")
-
-	end
-
-	JSON3.write(pwd() * "/json_data/" * filename, metric_data, allow_inf = true)
-
-end
-
-
-function transform_data_to_heatmap(experiment::Experiment, ads::AccuracyDataSeries)
-
-	metric_symbols = [:errornorm, :trueresnorm]
-
-	# Isolate data first in a vector. Dictionary with each value being a vector of vectors.
-	tmp_data = Dict(metric => [ getproperty(ads[i], metric) for i in eachindex(ads) ] for metric in metric_symbols )
+    data = Dict(
+              "metric_data" => ads,
+              "bounds"      => upper_bounds,
+              "max_iter"    => experiment.max_iter,
+              "precision_labels" => precision_vector
+          )
 
 	
-	# Dictionary, where each value is a pair of floats and integers.
-	min_idx_pairs = Dict( 
-
-		metric => Vector{Tuple{Float64, Int}}(undef, experiment.max_iter) for metric in metric_symbols 
-
-	) 
-
-	# Apply Boolean mask and find corresponding minima and indices.
-	for metric in metric_symbols
-
-		tmp_data_metric = tmp_data[metric]
-
-		for (i, vector) in enumerate(tmp_data_metric)
-
-			masked_data_array = vector[ map(x -> x > 0.0, vector)]
-
-			min_idx_pairs[metric][i] = findmin(masked_data_array)
-
-		end
-
-	end
-
-	# We need to transform data to backward or forward error, respectively. 
-	normAx               = experiment.ls.normA * experiment.ls.normx
-	residual_multiplier  = normAx / ( norm(experiment.ls.b) * normAx )
-
-	multiplier = Dict( 
-
-				  metric 
-
-				  => metric == :trueresnorm ? residual_multiplier
-
-				  : sqrt(experiment.ls.normA) for metric in metric_symbols 
-				)
-
-	n_precisions    = 4 # Number of different precisions
-
-	minima_matrices = Dict(metric => zeros(n_precisions, n_precisions) for metric in metric_symbols)
-
-	iteration_count_matrix = Matrix{Int}(undef, (n_precisions, n_precisions))
-
-	for j in 1:n_precisions, i in 1:n_precisions
-
-		linear_index = i + (j - 1) * n_precisions
-
-		for metric in metric_symbols
-
-			min_metric_value             = min_idx_pairs[metric][linear_index][1]
-			minima_matrices[metric][j,i] = min_metric_value * multiplier[metric]
-
-		end
-
-		iteration_count_matrix[j,i] = min_idx_pairs[:errornorm][linear_index][2]
-
-	end
-
-	return minima_matrices, iteration_count_matrix
+		JSON.json( pwd() * "/json_data/" * filename, data; pretty = true, allownan = true )
 
 end
 
-get_label_array(experiment::Experiment{Left}) = experiment.precisions
+"""
+Compute minimum and corresponding index of each given metric.
+"""
+function Base.findmin(ad::AccuracyData, metric::String) 
 
-function get_label_array(experiment::Experiment{Split}) 
+		minimum = 0.0
+		idx     = 0
 
-	n_precisions = length(experiment.precisions)
+		metric_data  = ad.metric_dictionary[metric]
+		minimum, idx = findmin(metric_data[ map(x -> x > 0.0, metric_data)])
 
-	step = Int( sqrt(n_precisions) )
-
-	return [ experiment.precisions[i][1] for i in 1:step:n_precisions ]
+		return idx, minimum
 end
 
-function write_heatmap_data(filename::String, experiment::Experiment{T}, ads::AccuracyDataSeries) where T <: PreconditioningScheme
+function multiplier(experiment::Experiment, metric::String) 
 
-	label_dict =  Dict(
+		# We need to transform data to backward or forward error, respectively. 
+		normAx               = experiment.ls.normA * experiment.ls.normx
+		residual_multiplier  = normAx / ( norm(experiment.ls.b) + normAx )
 
-        Float64  => "fp64",
-        Float32  => "fp32",
-        Float16  => "fp16",
-        BFloat16 => "b16"
-    )
+		multiplier = 1.0
 
-	minima_matrices, iteration_count_matrix = transform_data_to_heatmap(experiment, ads)
+		if metric == "ErrorNorm"
 
-	label_array = get_label_array(experiment)
+				multiplier = normAx
 
-	println(typeof(minima_matrices[:errornorm]))
+		elseif metric == "TrueResNorm"
+
+				multiplier = residual_multiplier
+
+		end
+
+		return multiplier
+
+end
+
+
+"""
+Generate forward and backward error as well as iteration count matrices for split preconditioned PCG runs.  
+"""
+function transform_data_to_heatmap(experiment::Experiment, ads::AccuracyDataSeries, metrics...)
+
+		tmp = keys(ads.series) 
+
+		precision_vector = sort([key for key in tmp], rev = true)
+
+		n_runs           = length(ads)         # Total number of combinations of different precisions
+		n_precisions     = Int( sqrt(n_runs) ) # Number of different precisions 
+
+		minima_matrices  = Dict(metric => zeros(n_precisions, n_precisions) for metric in metrics)
+
+		iteration_count_matrix = Matrix{Int}(undef, (n_precisions, n_precisions))
+
+    for metric in metrics
+
+      metric_array         = zeros(n_runs)
+      iterationcount_array = zeros(n_runs)
+
+      for (i, precision) in enumerate(precision_vector)
+
+        iterationcount_array[i], metric_array[i] = findmin(ads[precision], metric)
+
+      end
+
+      metric_multiplier       = multiplier(experiment, metric)
+      minima_matrices[metric] = metric_multiplier .* reshape(metric_array, n_precisions, n_precisions)
+      iteration_count_matrix  = reshape(iterationcount_array, n_precisions, n_precisions)
+
+    end
+
+		return minima_matrices, iteration_count_matrix
+
+end
+
+
+function write_heatmap_data(filename::String, experiment::Experiment, ads::AccuracyDataSeries) 
+
+	minima_matrices, iteration_count_matrix = transform_data_to_heatmap(experiment, ads, "ErrorNorm", "TrueResNorm")
+
+  precisions = experiment.precisions
+  tmp        = [precisiontolabel(precisions[j]) for precisions in precisions for j in eachindex(precisions)]
+
+  precision_vector = sort(unique(tmp), rev = true)
+  n                = length(precision_vector) 
 
 	data = Dict(
-			"FE_matrix"        => minima_matrices[:errornorm],
-			"BE_matrix"        => minima_matrices[:trueresnorm],
+			"FE_matrix"        => minima_matrices["ErrorNorm"],
+			"BE_matrix"        => minima_matrices["TrueResNorm"],
 			"ic_matrix"        => iteration_count_matrix,
-			"precision_labels" => [ label_dict[label] for label in label_array ]
-			)
+			"precision_labels" => precision_vector,
+      "precision_matrix" => reshape(sort([process_label(precision, Split) for precision in experiment.precisions], rev = true), n, n)
+	)
 
 	if !isdir("json_data")
 
@@ -335,7 +266,5 @@ function write_heatmap_data(filename::String, experiment::Experiment{T}, ads::Ac
 
 	end
 
-	#JSON3.write( pwd() * "/json_data/" * filename, data )
-	JSON.json( pwd() * "/json_data/" * filename, data )
-
+	JSON.json( pwd() * "/json_data/" * filename, data; pretty = true)
 end

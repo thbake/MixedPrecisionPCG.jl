@@ -3,10 +3,10 @@ export  preconditioned_condition_number
 
 mutable struct ConvergenceData{T}
 
-    n                      ::Int          # Number of dimension.
-    iter_number            ::Int          # Number of iterations.
-    updated_residuals      ::Matrix{T}   
-    iterates               ::Matrix{T}    # n by k matrix representing the k iterates.
+    n                ::Int          # Number of dimension.
+    max_iter         ::Int          # Number of iterations.
+    updated_residuals::Matrix{T}   
+    iterates         ::Matrix{T}    # n by k matrix representing the k iterates.
 
     function ConvergenceData{T}(n::Int, max_iter::Int) where T<:AbstractFloat
 

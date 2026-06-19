@@ -1,0 +1,30 @@
+{
+  "bounds": {
+    "ErrorNorm": 3.5356930043324756e-14,
+    "TrueResNorm": 1.1180843000814208e-16
+  },
+  "max_iter": 2,
+  "metric_data": {
+    "fp16": {
+      "ErrorNorm": [
+        0.0,
+        0.0
+      ],
+      "ResGapNorm": [
+        0.0,
+        0.0
+      ],
+      "TrueResNorm": [
+        0.0,
+        0.0
+      ],
+      "UpdatedResNorm": [
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "precision_labels": [
+    "fp16"
+  ]
+}

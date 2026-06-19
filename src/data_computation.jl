@@ -1,53 +1,81 @@
-using LinearAlgebra
+using LinearAlgebra, BFloat16s
 
 export AccuracyData, AccuracyDataSeries
-export compute_accuracy_data!, get_iternumber
+export compute_accuracy_data!, precisiontolabel, process_label
+
+process_label(precision::DataType, ::Type{Left}) = precisiontolabel(precision)
+
+process_label(
+  precisions::Tuple{T1, T2},
+            ::Type{<:AbstractSplit}
+ ) where {T1 <: DataType, T2 <: DataType} = "(" * 
+											precisiontolabel(precisions[1]) *
+											", " * 
+											precisiontolabel(precisions[2]) *
+											")"
+
+precisiontolabel(float_type::Type{Float64}) = "fp64"
+precisiontolabel(float_type::Type{Float32}) = "fp32"
+precisiontolabel(float_type::Type{Float16}) = "fp16"
+precisiontolabel(float_type::Type{BFloat16}) = "bfloat16"
 
 """
-    AccuracyData{T}(iter_number, trueresnorm, updatedresnorm, errornorm,
-        resgapnorm, max_ratios)
+		AccuracyData{T}(max_iter, metric_dictionary)
 
     Structure holding accuracy measures of different PCG runs as iterations go by.
 
     
 # Arguments
-- `iter_number::Int`: Number of iterations
-- `trueresnorm::Vector{Vector{T}}`: Vector true residual norms of different PCG runs.
-- `updatedresnorm::Vector{Vector{T}}`
-- `errornorm::Vector{Vector{T}}`
-- `resgapnorm::Vector{Vector{T}}`
-- `max_ratios::Dict{Int, Tuple{Float64, Int}}`
+- `max_iter::Int`: Number of iterations
+- `metric_dictionary::Int`: Dictionary holding accuracy metrics as keys and the corresponding values across iterations.
    
     
 """
 mutable struct AccuracyData{T}
 
-    iter_number   ::Int
-    trueresnorm   ::Vector{T}
-    updatedresnorm::Vector{T}
-    errornorm     ::Vector{T}
-    resgapnorm    ::Vector{T}
+    max_iter         ::Int
+    metric_dictionary::Dict{String, Vector{T}}
 
-    function AccuracyData{T}(iter_number::Int) where {T}
+    function AccuracyData{T}(max_iter::Int) where {T}
 
-        trueresnorm    = zeros(iter_number) 
-        updatedresnorm = zeros(iter_number) 
-        errornorm      = zeros(iter_number) 
-        resgapnorm     = zeros(iter_number) 
+      metric_dictionary = Dict{String, Vector{T}}(
+        "TrueResNorm"    => zeros(max_iter),
+        "UpdatedResNorm" => zeros(max_iter),
+        "ErrorNorm"      => zeros(max_iter),
+        "ResGapNorm"     => zeros(max_iter)
+      )
 
-        new(iter_number, trueresnorm, updatedresnorm, errornorm, resgapnorm)
+      new(max_iter, metric_dictionary)
 
     end
 
 end
 
-mutable struct AccuracyDataSeries{T}
+Base.getindex(ad::AccuracyData, key::String) = ad.metric_dictionary[key]
 
-    series::Vector{AccuracyData{T}}
+"""
+		AccuracyDataSeries{T}(series)
 
-    function AccuracyDataSeries{T}(collection_size::Integer, iter_number::Integer) where T
+    Structure holding AccuracyData structures corresponding to the precisions with which the preconditioners were applied.
+    For instance: AccuracyDataSeries{T, U}[(Float32, Float64)] => AccuracyData{T} 
+    
+# Arguments
+- `max_iter::Int`: Number of iterations
+- `metric_dictionary::Int`: Dictionary holding accuracy metrics as keys and the corresponding values across iterations.
+   
+    
+"""
+mutable struct AccuracyDataSeries{T} 
 
-        series = [AccuracyData{T}(iter_number) for _ in 1:collection_size]
+		series::Dict{String, AccuracyData{T}}
+
+    function AccuracyDataSeries{T}(
+                precisions::Vector{U},
+                scheme    ::Type{<:PreconditioningScheme},
+                max_iter  ::Integer
+             ) where {T, U}
+
+        series = Dict( process_label(precision, scheme) => AccuracyData{T}(max_iter) for precision in precisions )
 
         new(series)
 
@@ -55,13 +83,13 @@ mutable struct AccuracyDataSeries{T}
 
 end
 
-get_iternumber(ads::AccuracyDataSeries) = ads.series[1].iter_number
+Base.length(ads::AccuracyDataSeries) = length(ads.series)
 
-Base.length(ads::AccuracyDataSeries)               = length(ads.series)
+Base.getindex(ads::AccuracyDataSeries, key::U, scheme::Type{T}) where {T <: PreconditioningScheme, U} = ads.series[process_label(key, scheme)] 
 
-Base.getindex(ads::AccuracyDataSeries, i::Integer) = ads.series[i]
+Base.getindex(ads::AccuracyDataSeries{T}, key::String) where {T} = ads.series[key] 
 
-Base.eachindex(ads::AccuracyDataSeries)            = eachindex(ads.series)
+Base.eachindex(ads::AccuracyDataSeries) = eachindex(ads.series)
 
 printlnindent(s::AbstractString) = println("  " * s)
 
@@ -73,19 +101,19 @@ function compute_accuracy_data!(
     ls            ::LinearSystem{T},
     preconditioner::AbstractMatrix) where T
 
-    ad.trueresnorm    =    true_residual_norm(cd, ls)
+		ad.metric_dictionary["TrueResNorm"]    = true_residual_norm(cd, ls)
 
     printlnindent("Computed true residual")
 
-    ad.updatedresnorm = updated_residual_norm(cd, ls)
+    ad.metric_dictionary["UpdatedResNorm"] = updated_residual_norm(cd, ls)
 
     printlnindent("Computed updated residual")
 
-    ad.errornorm      =           error_Anorm(cd, ls)
+		ad.metric_dictionary["ErrorNorm"]      = error_Anorm(cd, ls)
 
     printlnindent("Computed A-norm of the error")
 
-    ad.resgapnorm     = residualgapnorm(cd, ls, scheme, preconditioner)
+		ad.metric_dictionary["ResGapNorm"]     = residualgapnorm(cd, ls, scheme, preconditioner)
 
     printlnindent("Computed norm of the residual gap\n")
 
@@ -94,12 +122,12 @@ end
 function Base.show(io::IO, ad::AccuracyData{T}) where T<:AbstractFloat
 
     println(io, "Accuracy data: ")
-    println(io, " - Relative true residual norm:    ", typeof(ad.trueresnorm))
-    println(io, " - Relative updated residual norm: ", typeof(ad.updatedresnorm))
-    println(io, " - Relative in the A-norm:         ", typeof(ad.errornorm))
+		println(io, " - Relative true residual norm:    ", typeof(ad.metric_dictionary["TrueResNorm"]))
+		println(io, " - Relative updated residual norm: ", typeof(ad.metric_dictionary["UpdatedResNorm"]))
+		println(io, " - Relative in the A-norm:         ", typeof(ad.metric_dictionary["ErrorNorm"]))
 
-    println(io, "\nComputations ran for ",  ad.iter_number, " iterations.")
-    println(io, "Achieved relative residual norm: ", ad.trueresnorm[end]
+    println(io, "\nComputations ran for ",  ad.max_iter, " iterations.")
+		println(io, "Achieved relative residual norm: ", ad.metric_dictionary["TrueResNorm"][end]
     )
 end
 
@@ -109,13 +137,13 @@ Compute updated residual norm ||rk|| / ||A|| ||x||
 
 function updated_residual_norm(cd::ConvergenceData, ls::LinearSystem)
     
-	norm_rk = zeros(cd.iter_number)
+	norm_rk = zeros(cd.max_iter)
 
-	for k in 1:cd.iter_number
+	for k in 1:cd.max_iter
 
 		tmp = norm(@view cd.updated_residuals[:, k])
 
-		norm_rk[k] = isnan(tmp) ? 0.0 : tmp
+    norm_rk[k] = ( isnan(tmp) || isinf(tmp) ) ? 0.0 : tmp
 	end
 
     return inv(ls.normA * ls.normx) .* norm_rk
@@ -128,11 +156,11 @@ Compute relative (true) residual norm ||b - A xk|| / ||A|| ||x||.
 """
 function true_residual_norm(cd::ConvergenceData, ls::LinearSystem)
 
-    trueresnorm = zeros(cd.iter_number)
+    trueresnorm = zeros(cd.max_iter)
 
     xk = cd.iterates
 
-    for k in 1:cd.iter_number
+    for k in 1:cd.max_iter
 
 		tmp = norm(ls.b - ls.A * @view xk[:, k]) 
 
@@ -149,12 +177,12 @@ Compute relative error in the A-norm: ||x - xk||_A / ||x - x0||_A.
 """
 function error_Anorm(cd::ConvergenceData, ls::LinearSystem)
 
-    errornorm = zeros(cd.iter_number)
+    errornorm = zeros(cd.max_iter)
 
     xk            = cd.iterates
     denominator   = sqrt(norm(ls.A)) * norm(ls.x)
 
-    for k in 1:cd.iter_number
+    for k in 1:cd.max_iter
 
 		tmp = A_norm(ls.A, ls.x - @view xk[:, k])
 
@@ -201,12 +229,12 @@ function residualgapnorm(
     scheme        ::Type{<:PreconditioningScheme},
     preconditioner::AbstractMatrix)
 
-    resgapnorm = zeros(cd.iter_number)
+    resgapnorm = zeros(cd.max_iter)
 
     xk = cd.iterates
     rk = process_residuals(copy(cd.updated_residuals), scheme(), preconditioner)
 
-    for k in 1:cd.iter_number
+    for k in 1:cd.max_iter
 
 		tmp = norm(ls.b - ls.A * @view(xk[:, k]) -  @view(rk[:, k]))
 
