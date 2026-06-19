@@ -24,22 +24,6 @@ Abstract type representing a general notion of a preconditioner.
 """
 abstract type AbstractPreconditioner{uL, uR, scheme} end
 
-function scale_preconditioner(M::AbstractMatrix, precision::DataType)      
-
-  n = size(M, 1)
-
-  return precision.(M), I(n), I(n)
-
-end
-
-function scale_preconditioner(M::AbstractMatrix, precision::Type{Float16}) 
-
-  M, R, S = two_sided_diagonal_scaling(M, 0.8, 1e-4)
-
-  return M, R, S
-
-end
-
 
 """
 Preconditioner resulting from an (incomplete) factorization of the system 
@@ -60,8 +44,6 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
 
     Pl::Matrix{uL} # Left factor.
     Pr::Matrix{uR} # Right factor.
-    R ::AbstractMatrix
-    S ::AbstractMatrix
 
 	"""
 	Constructor given left and right preconditioners, and preconditioning scheme.
@@ -72,8 +54,7 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
         Pr    ::AbstractMatrix{uR},
         scheme::Type{PreconditioningScheme}) where {uL, uR} <: AbstractFloat
 
-        n = size(Pl, 1)
-        new{uL, uR, scheme}(Pl, Pr, I(n), I(n)) 
+        new{uL, uR, scheme}(Pl, Pr) 
 
     end
 
@@ -85,11 +66,7 @@ struct FactorizationPreconditioner{uL, uR, scheme} <: AbstractPreconditioner{uL,
         Pl    ::AbstractMatrix, 
         Pr    ::AbstractMatrix) where {uL <: AbstractFloat, uR <: AbstractFloat, scheme }
 
-        # Perform scaling if necessary
-        Pl, R, S = scale_preconditioner(Pl, uL)
-        Pr, R, S = scale_preconditioner(Pl, uR)
-
-        new(Pl, Pr, R, S)
+        new(Pl, Pr)
 
     end
 
@@ -171,20 +148,6 @@ function general_precond(
     r::AbstractVector{u}) where {u, uL, uR}
 
     s = u.(M.Pr \ (M.Pl \ uL.(r)))
-    q = s
-
-    return s,q
-end
-
-function general_precond(
-    M::FactorizationPreconditioner{Float16, Float16, Left},
-    r::AbstractVector{u}) where {u}
-
-    println("Scaling you")
-    println(M.R)
-
-    s_half = M.Pr \ (M.Pl \ Float16.(M.R * r)) # Scale, cast and solve
-    s = u.(M.S * s_half) # Scale back and cast to working precision
     q = s
 
     return s,q
