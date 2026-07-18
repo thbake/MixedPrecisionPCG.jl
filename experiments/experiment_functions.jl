@@ -59,6 +59,16 @@ mutable struct Experiment{T <: PreconditioningScheme}
 
   end
 
+  function Experiment{T}(
+      ls            ::LinearSystem,
+      preconditioner::AbstractMatrix,
+      max_iter      ::Int,
+      precisions    ::AbstractVector) where T <: PreconditioningScheme
+
+    new(ls, preconditioner, max_iter, precisions)
+
+  end
+
 end
 
 get_unique_precisions(experiment::Experiment{Left}) = experiment.precisions
@@ -69,9 +79,26 @@ getproblemsize(experiment::Experiment) = size(experiment.ls.A, 1)
 
 get_scheme(::Experiment{T}) where T = T
 
-function perturb_preconditioner!(experiment::Experiment, perturbation::AbstractMatrix) 
+function perturb_preconditioner!(experiment::Experiment, perturbation::AbstractFloat) 
 
-  experiment.preconditioner += perturbation
+  #M_p = perturbation .* tril(rand(size(experiment.preconditioner)...))
+  #experiment.preconditioner += M_p
+
+  #R = rand(size(experiment.preconditioner)...)
+  #M = (experiment.preconditioner * experiment.preconditioner') + perturbation .* 0.5 .* (R + R')
+  
+  M = experiment.preconditioner * experiment.preconditioner'
+  n = size(experiment.preconditioner, 1)
+
+  pertrubedM = M + perturbation .* Symmetric(rand(n,n))
+
+  λ_min = minimum( eigvals(pertrubedM) )
+
+  shift = ( abs(λ_min) + 1.0).* I(n)
+
+  experiment.preconditioner = cholesky( Symmetric(shift + pertrubedM) ) 
+
+  #experiment.preconditioner = cholesky(0.5 .* (M + M'))
 
 end
 
@@ -267,4 +294,5 @@ function write_heatmap_data(filename::String, experiment::Experiment, ads::Accur
 	end
 
 	JSON.json( pwd() * "/json_data/" * filename, data; pretty = true)
+
 end

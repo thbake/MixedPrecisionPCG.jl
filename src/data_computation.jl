@@ -14,6 +14,8 @@ process_label(
 											precisiontolabel(precisions[2]) *
 											")"
 
+#process_label(unpreconditioned_label::String) = "unpreconditioned"
+
 precisiontolabel(float_type::Type{Float64}) = "fp64"
 precisiontolabel(float_type::Type{Float32}) = "fp32"
 precisiontolabel(float_type::Type{Float16}) = "fp16"
@@ -27,7 +29,7 @@ precisiontolabel(float_type::Type{BFloat16}) = "bfloat16"
     
 # Arguments
 - `max_iter::Int`: Number of iterations
-- `metric_dictionary::Int`: Dictionary holding accuracy metrics as keys and the corresponding values across iterations.
+- `metric_dictionary::Dict{String, Vector}`: Dictionary holding accuracy metrics as keys and the corresponding values across iterations.
    
     
 """
