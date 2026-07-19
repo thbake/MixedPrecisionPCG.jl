@@ -2,7 +2,6 @@ using Base: upperbound
 using MixedPrecisionPCG
 using BFloat16s, LinearAlgebra, Random
 
-#Random.seed!(1234)
 Random.seed!(12349301)
 
 # Example: Strakos Matrix with eigenvalues accumulated to the left.
@@ -55,8 +54,8 @@ write_heatmap_data("heatmaps_data.json", ex4, ads4)
 
 
 # Adapted experiment of Epperly, Greenbaum and Nakatsukasa.
-n       = 100;
-cond_A  = 1e14;
+n       = 100; # Reduce problem size due to extreme slow unpreconditioned CG convergence.
+cond_A  = 1e12;
 sigma   = diagm( 10.0 .^(range(0, -log10(cond_A), n)) );
 
 # Create Haar orthogonal matrix.
@@ -83,7 +82,7 @@ ads = runpcgexperiments(ex)
 write_to_file("convergence.json", ads, ex)
 
 # Run unpreconditioned instance.
-ex.max_iter       = 150_000;
+ex.max_iter       = 200_000;
 ex.preconditioner = I(n);
 ex.precisions     = [d]
 ads_unprec        = runpcgexperiments(ex)

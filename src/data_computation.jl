@@ -14,8 +14,6 @@ process_label(
 											precisiontolabel(precisions[2]) *
 											")"
 
-#process_label(unpreconditioned_label::String) = "unpreconditioned"
-
 precisiontolabel(float_type::Type{Float64}) = "fp64"
 precisiontolabel(float_type::Type{Float32}) = "fp32"
 precisiontolabel(float_type::Type{Float16}) = "fp16"

@@ -79,29 +79,6 @@ getproblemsize(experiment::Experiment) = size(experiment.ls.A, 1)
 
 get_scheme(::Experiment{T}) where T = T
 
-function perturb_preconditioner!(experiment::Experiment, perturbation::AbstractFloat) 
-
-  #M_p = perturbation .* tril(rand(size(experiment.preconditioner)...))
-  #experiment.preconditioner += M_p
-
-  #R = rand(size(experiment.preconditioner)...)
-  #M = (experiment.preconditioner * experiment.preconditioner') + perturbation .* 0.5 .* (R + R')
-  
-  M = experiment.preconditioner * experiment.preconditioner'
-  n = size(experiment.preconditioner, 1)
-
-  pertrubedM = M + perturbation .* Symmetric(rand(n,n))
-
-  λ_min = minimum( eigvals(pertrubedM) )
-
-  shift = ( abs(λ_min) + 1.0).* I(n)
-
-  experiment.preconditioner = cholesky( Symmetric(shift + pertrubedM) ) 
-
-  #experiment.preconditioner = cholesky(0.5 .* (M + M'))
-
-end
-
 function runpcgexperiments(experiment::Experiment{T}) where T <: PreconditioningScheme
 
 		scheme = get_scheme(experiment)
@@ -223,7 +200,6 @@ function multiplier(experiment::Experiment, metric::String)
 		elseif metric == "TrueResNorm"
 
 				multiplier = residual_multiplier
-
 		end
 
 		return multiplier
@@ -273,11 +249,11 @@ function write_heatmap_data(filename::String, experiment::Experiment, ads::Accur
 
 	minima_matrices, iteration_count_matrix = transform_data_to_heatmap(experiment, ads, "ErrorNorm", "TrueResNorm")
 
-  precisions = experiment.precisions
-  tmp        = [precisiontolabel(precisions[j]) for precisions in precisions for j in eachindex(precisions)]
+	precisions = experiment.precisions
+	tmp        = [precisiontolabel(precisions[j]) for precisions in precisions for j in eachindex(precisions)]
 
-  precision_vector = sort(unique(tmp), rev = true)
-  n                = length(precision_vector) 
+	precision_vector = sort(unique(tmp), rev = true)
+	n                = length(precision_vector) 
 
 	data = Dict(
 			"FE_matrix"        => minima_matrices["ErrorNorm"],

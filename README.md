@@ -13,4 +13,5 @@ julia> using .NumericalExperiments
 julia> include("experiments/experiments.jl")
 ```
 
-This will create a directory called "json\_data" with the corresponding .json files containing.
+This will create a directory called "json\_data" with the corresponding .json files containing convergence data.
+Plots were created with the Typst package Lilaq.
